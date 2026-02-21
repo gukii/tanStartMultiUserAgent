@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* Draft field highlight applied by CollaborationHarness */
+[data-draft="true"] {
+  background-color: #f5f3ff !important;
+  border-color: #8b5cf6 !important;
+  outline: 2px solid #c4b5fd !important;
+  outline-offset: 1px;
+}
+
+/* Smooth cursor transitions for ghost cursors */
+.ghost-cursor {
+  pointer-events: none;
+  transition: left 80ms ease-out, top 80ms ease-out;
+  will-change: transform;
+}
