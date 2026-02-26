@@ -49,6 +49,7 @@ interface UserInfo {
 
 interface CursorState extends UserInfo, CursorPosition {
   lastSeen: number
+  message?: string
 }
 
 interface FieldValue {
@@ -82,11 +83,18 @@ interface RoomState {
   drafts: Record<string, DraftSuggestion>
   submitMode: 'any' | 'consensus'
   readyStates: Record<string, boolean>
+  fieldLocks: Record<string, string>
 }
 
 type IncomingMessage =
   | { type: 'IDENTIFY'; userId: string; name: string; color: string }
+  | { type: 'UPDATE_USER'; name: string; color: string }
+  | { type: 'SET_CURSOR_MESSAGE'; message: string }
   | { type: 'CURSOR_MOVE'; position: CursorPosition }
+  | { type: 'FIELD_FOCUS'; fieldId: string }
+  | { type: 'FIELD_BLUR'; fieldId: string }
+  | { type: 'FIELD_ACTIVITY'; fieldId: string }
+  | { type: 'FORCE_FIELD_FOCUS'; fieldId: string }
   | { type: 'UPDATE_FIELD'; fieldId: string; value: string; timestamp: number }
   | { type: 'PAGE_SCHEMA'; schema: FieldSchema[] }
   | { type: 'DRAFT_FIELD'; fieldId: string; value: string; source: string; reason?: string }
@@ -109,11 +117,13 @@ export default class CollaborationServer implements Party.Server {
   // In-memory room state – one instance per room, managed by PartyKit
   private users = new Map<string, UserInfo>()
   private cursors = new Map<string, CursorState>()
+  private cursorMessages = new Map<string, string>()
   private fieldValues = new Map<string, FieldValue>()
   private drafts = new Map<string, DraftSuggestion>()
   private pageSchema: FieldSchema[] = []
   private submitMode: 'any' | 'consensus' = 'any'
   private readyStates = new Map<string, boolean>()
+  private fieldLocks = new Map<string, string>() // fieldId -> userId
 
   constructor(readonly room: Party.Room) {}
 
@@ -141,6 +151,7 @@ export default class CollaborationServer implements Party.Server {
       drafts: Object.fromEntries(this.drafts),
       submitMode: this.submitMode,
       readyStates: Object.fromEntries(this.readyStates),
+      fieldLocks: Object.fromEntries(this.fieldLocks),
     }
     conn.send(JSON.stringify({ type: 'ROOM_STATE', state: snapshot }))
 
@@ -170,13 +181,36 @@ export default class CollaborationServer implements Party.Server {
       }
 
       // ----------------------------------------------------------------
+      case 'UPDATE_USER': {
+        const existing = this.users.get(userId)
+        if (!existing) break
+        const updated: UserInfo = { userId, name: msg.name, color: msg.color }
+        this.users.set(userId, updated)
+        // Update cursor too
+        const cursor = this.cursors.get(userId)
+        if (cursor) {
+          this.cursors.set(userId, { ...cursor, name: msg.name, color: msg.color })
+        }
+        this.broadcast({ type: 'USER_UPDATED', userId, name: msg.name, color: msg.color }, [sender.id])
+        break
+      }
+
+      // ----------------------------------------------------------------
+      case 'SET_CURSOR_MESSAGE': {
+        this.cursorMessages.set(userId, msg.message)
+        break
+      }
+
+      // ----------------------------------------------------------------
       case 'CURSOR_MOVE': {
         const user = this.users.get(userId)
         if (!user) break
 
+        const message = this.cursorMessages.get(userId)
         const cursor: CursorState = {
           ...user,
           ...msg.position,
+          message,
           lastSeen: Date.now(),
         }
         this.cursors.set(userId, cursor)
@@ -188,9 +222,82 @@ export default class CollaborationServer implements Party.Server {
             position: msg.position,
             name: user.name,
             color: user.color,
+            message,
           },
           [sender.id],
         )
+        break
+      }
+
+      // ----------------------------------------------------------------
+      case 'FIELD_FOCUS': {
+        const user = this.users.get(userId)
+        if (!user) break
+
+        // Lock the field to this user
+        this.fieldLocks.set(msg.fieldId, userId)
+
+        this.broadcast(
+          {
+            type: 'FIELD_LOCKED' as const,
+            fieldId: msg.fieldId,
+            userId,
+            userName: user.name,
+          },
+          [sender.id],
+        )
+        break
+      }
+
+      // ----------------------------------------------------------------
+      case 'FIELD_ACTIVITY': {
+        // User is actively typing - broadcast to others so they know not to evict
+        const timestamp = Date.now()
+        this.broadcast(
+          {
+            type: 'FIELD_ACTIVITY' as const,
+            fieldId: msg.fieldId,
+            userId,
+            timestamp,
+          },
+          [sender.id],
+        )
+        break
+      }
+
+      // ----------------------------------------------------------------
+      case 'FORCE_FIELD_FOCUS': {
+        const user = this.users.get(userId)
+        if (!user) break
+
+        // Forcefully take the lock from whoever owns it
+        const previousOwner = this.fieldLocks.get(msg.fieldId)
+        this.fieldLocks.set(msg.fieldId, userId)
+
+        // Notify everyone about the unlock (including previous owner)
+        this.broadcast({ type: 'FIELD_UNLOCKED' as const, fieldId: msg.fieldId })
+
+        // Then immediately lock it to the new user
+        this.broadcast(
+          {
+            type: 'FIELD_LOCKED' as const,
+            fieldId: msg.fieldId,
+            userId,
+            userName: user.name,
+          },
+          [sender.id],
+        )
+        break
+      }
+
+      // ----------------------------------------------------------------
+      case 'FIELD_BLUR': {
+        // Only unlock if this user owns the lock
+        const lockOwner = this.fieldLocks.get(msg.fieldId)
+        if (lockOwner === userId) {
+          this.fieldLocks.delete(msg.fieldId)
+          this.broadcast({ type: 'FIELD_UNLOCKED' as const, fieldId: msg.fieldId })
+        }
         break
       }
 
@@ -303,6 +410,18 @@ export default class CollaborationServer implements Party.Server {
     this.users.delete(userId)
     this.cursors.delete(userId)
     this.readyStates.delete(userId)
+
+    // Release any field locks held by this user
+    const locksToRelease: string[] = []
+    for (const [fieldId, lockOwner] of this.fieldLocks.entries()) {
+      if (lockOwner === userId) {
+        locksToRelease.push(fieldId)
+      }
+    }
+    for (const fieldId of locksToRelease) {
+      this.fieldLocks.delete(fieldId)
+      this.broadcast({ type: 'FIELD_UNLOCKED', fieldId })
+    }
 
     this.broadcast({ type: 'USER_LEAVE', userId })
   }

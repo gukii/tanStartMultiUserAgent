@@ -7,7 +7,8 @@
     "dev:party": "pnpm dlx partykit dev",
     "build": "vite build",
     "deploy:party": "pnpm dlx partykit deploy",
-    "preview": "vite preview"
+    "preview": "vite preview --host 0.0.0.0",
+    "start": "vite preview --host 0.0.0.0 --port ${PORT:-3000}"
   },
   "packageManager": "pnpm@9.0.0",
   "dependencies": {

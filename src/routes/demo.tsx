@@ -11,9 +11,10 @@
  */
 
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useId } from 'react'
-import { CollaborationHarness } from '../components/CollaborationHarness'
+import { useState, useId, useEffect } from 'react'
+import { CollaborationHarness, useCollaboration } from '../components/CollaborationHarness'
 import { SubmitControl } from '../components/SubmitControl'
+import { UserSettingsPanel } from '../components/UserSettingsPanel'
 import { getNormalBehavior } from '../lib/normalBehavior.server'
 
 export const Route = createFileRoute('/demo')({
@@ -26,6 +27,7 @@ export const Route = createFileRoute('/demo')({
 
 function CheckoutForm() {
   const [submitted, setSubmitted] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const firstId = useId()
   const lastId = useId()
   const emailId = useId()
@@ -36,6 +38,15 @@ function CheckoutForm() {
   const cityId = useId()
   const countryId = useId()
   const notesId = useId()
+
+  // Client-only rendering to avoid hydration issues with browser extensions
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return <div className="h-96" /> // Placeholder during SSR
+  }
 
   if (submitted) {
     return (
@@ -311,6 +322,98 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Settings panel wrapper that uses the collab context
+// ---------------------------------------------------------------------------
+
+function SettingsPanelWrapper({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { userName, userColor, cursorMessage, updateUser, setCursorMessage } = useCollaboration()
+  return (
+    <UserSettingsPanel
+      isOpen={isOpen}
+      onClose={onClose}
+      userName={userName}
+      userColor={userColor}
+      cursorMessage={cursorMessage}
+      updateUser={updateUser}
+      setCursorMessage={setCursorMessage}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Touch cursor painting toggle button
+// ---------------------------------------------------------------------------
+
+function TouchCursorToggle() {
+  const { touchCursorMode, setTouchCursorMode } = useCollaboration()
+  const [isTouchDevice, setIsTouchDevice] = useState(false)
+
+  useEffect(() => {
+    // Detect if this is a touch device
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  }, [])
+
+  // Only show on touch devices
+  if (!isTouchDevice) return null
+
+  return (
+    <button
+      onClick={() => setTouchCursorMode(!touchCursorMode)}
+      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition flex items-center gap-2 ${
+        touchCursorMode
+          ? 'bg-violet-600 text-white border-violet-600'
+          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+      }`}
+      title={touchCursorMode ? 'Touch cursor painting: ON' : 'Touch cursor painting: OFF'}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M9 9.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+        <path d="M12 3l.5 8.5L21 9l-2 6H3l-1-4z"/>
+      </svg>
+      {touchCursorMode ? 'ON' : 'OFF'}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Quick cursor message input (for mini chat while pointing)
+// ---------------------------------------------------------------------------
+
+function QuickCursorMessageInput() {
+  const { cursorMessage, setCursorMessage } = useCollaboration()
+  const [localMessage, setLocalMessage] = useState(cursorMessage)
+
+  useEffect(() => {
+    setLocalMessage(cursorMessage)
+  }, [cursorMessage])
+
+  function commitMessage() {
+    setCursorMessage(localMessage)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      commitMessage()
+      e.currentTarget.blur() // Optional: blur after sending
+    }
+  }
+
+  return (
+    <input
+      type="text"
+      value={localMessage}
+      onChange={(e) => setLocalMessage(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={commitMessage}
+      placeholder="Cursor message (press Enter)"
+      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200 transition"
+      style={{ minWidth: '200px' }}
+      title="Type a message to show next to your cursor, press Enter to send"
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Demo page
 // ---------------------------------------------------------------------------
 
@@ -318,11 +421,62 @@ function DemoPage() {
   const partyKitHost = import.meta.env.VITE_PARTYKIT_HOST as string ?? '127.0.0.1:1999'
   const roomId = 'room-demo'
   const [submitMode, setSubmitMode] = useState<'any' | 'consensus'>('any')
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
+  return (
+    <CollaborationHarness
+      roomId={roomId}
+      partyKitHost={partyKitHost}
+      submitMode={submitMode}
+    >
+      <DemoPageContent
+        submitMode={submitMode}
+        setSubmitMode={setSubmitMode}
+        settingsOpen={settingsOpen}
+        setSettingsOpen={setSettingsOpen}
+        partyKitHost={partyKitHost}
+        roomId={roomId}
+      />
+    </CollaborationHarness>
+  )
+}
+
+function DemoPageContent({
+  submitMode,
+  setSubmitMode,
+  settingsOpen,
+  setSettingsOpen,
+  partyKitHost,
+  roomId,
+}: {
+  submitMode: 'any' | 'consensus'
+  setSubmitMode: (mode: 'any' | 'consensus') => void
+  settingsOpen: boolean
+  setSettingsOpen: (open: boolean) => void
+  partyKitHost: string
+  roomId: string
+}) {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <div className="mb-6">
-        <a href="/" className="text-sm text-violet-600 hover:underline">← Back</a>
+        <div className="flex items-center justify-between">
+          <a href="/" className="text-sm text-violet-600 hover:underline">← Back</a>
+          <div className="flex items-center gap-3">
+            <TouchCursorToggle />
+            <QuickCursorMessageInput />
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
+              title="Change your name, color, and cursor message"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+              </svg>
+              Settings
+            </button>
+          </div>
+        </div>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">Checkout form · live demo</h1>
         <p className="mt-1 text-sm text-gray-500">
           Open this page in two tabs to see ghost cursors and field sync.
@@ -362,16 +516,13 @@ function DemoPage() {
         </div>
       </div>
 
-      {/* The harness wraps the entire checkout form – zero changes inside */}
-      <CollaborationHarness
-        roomId={roomId}
-        partyKitHost={partyKitHost}
-        submitMode={submitMode}
-      >
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-          <CheckoutForm />
-        </div>
-      </CollaborationHarness>
+      {/* The checkout form wrapped with collaboration */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+        <CheckoutForm />
+      </div>
+
+      {/* User settings panel (inside harness to access context) */}
+      <SettingsPanelWrapper isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       <div className="mt-8">
         <AISimulatorPanel partyKitHost={partyKitHost} roomId={roomId} />

@@ -11,6 +11,7 @@ export const Route = createRootRoute({
     ],
   }),
   component: Root,
+  notFoundComponent: NotFound,
 })
 
 function Root() {
@@ -25,5 +26,22 @@ function Root() {
         <Scripts />
       </body>
     </html>
+  )
+}
+
+function NotFound() {
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="text-center">
+        <h1 className="text-6xl font-bold text-gray-900">404</h1>
+        <p className="mt-4 text-xl text-gray-600">Page not found</p>
+        <a
+          href="/"
+          className="mt-6 inline-block rounded-lg bg-violet-600 px-6 py-3 text-sm font-semibold text-white hover:bg-violet-700 transition"
+        >
+          Go back home
+        </a>
+      </div>
+    </div>
   )
 }

@@ -10,6 +10,17 @@
 
 import { useCollaboration } from './CollaborationHarness'
 
+/**
+ * Extract initials from a name (e.g., "Chris Santa" → "CS")
+ */
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) {
+    return parts[0].substring(0, 2).toUpperCase()
+  }
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 interface SubmitControlProps {
   /** Called when the form should be submitted (all peers ready in consensus mode) */
   onSubmit?: () => void
@@ -67,6 +78,7 @@ export function SubmitControl({
         <div className="flex flex-wrap gap-2">
           {userList.map((user) => {
             const ready = readyStates[user.userId] ?? false
+            const initials = getInitials(user.name)
             return (
               <div
                 key={user.userId}
@@ -76,12 +88,17 @@ export function SubmitControl({
                   borderColor: ready ? user.color : '#d1d5db',
                   color: ready ? user.color : '#6b7280',
                 }}
+                title={user.name} // Show full name on hover
               >
                 <span
-                  className="inline-block h-2 w-2 rounded-full"
-                  style={{ backgroundColor: ready ? user.color : '#d1d5db' }}
-                />
-                <span className="font-medium">{user.name}</span>
+                  className="inline-flex items-center justify-center h-5 w-5 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: user.color,
+                    color: '#fff',
+                  }}
+                >
+                  {initials}
+                </span>
                 {ready && <span className="text-xs">✓</span>}
               </div>
             )

@@ -95,11 +95,16 @@ interface CollaborationContextValue {
   userId: string
   userName: string
   userColor: string
+  cursorMessage: string
   submitMode: 'any' | 'consensus'
   users: Record<string, { userId: string; name: string; color: string }>
   readyStates: Record<string, boolean>
   markReady: () => void
   unmarkReady: () => void
+  updateUser: (name: string, color: string) => void
+  setCursorMessage: (message: string) => void
+  touchCursorMode: boolean
+  setTouchCursorMode: (enabled: boolean) => void
 }
 
 const CollaborationContext = createContext<CollaborationContextValue | null>(null)
@@ -151,6 +156,13 @@ export function CollaborationHarness({
   const [users, setUsers] = useState<Record<string, { userId: string; name: string; color: string }>>({})
   const [currentSubmitMode, setCurrentSubmitMode] = useState<'any' | 'consensus'>(submitMode)
   const [readyStates, setReadyStates] = useState<Record<string, boolean>>({})
+  const [cursorMessage, setCursorMessageState] = useState<string>('')
+  const [fieldLocks, setFieldLocks] = useState<Record<string, string>>({}) // fieldId -> userId
+  const focusedFieldRef = useRef<string | null>(null) // Track which field we have focused
+  const forceLockingFieldRef = useRef<string | null>(null) // Track field we're force-locking (ignore next FIELD_UNLOCKED)
+  const [touchCursorMode, setTouchCursorMode] = useState(false) // Toggle for touch cursor painting
+  const fieldActivityTimestamps = useRef<Record<string, number>>({}) // Track last activity time per field per user (fieldId -> timestamp)
+  const [evictionBlocked, setEvictionBlocked] = useState<string | null>(null) // Track which field eviction was blocked for (show visual feedback)
 
   // ------------------------------------------------------------------
   // Live semantic map via MutationObserver
@@ -252,10 +264,28 @@ export function CollaborationHarness({
           setUsers(state.users)
           setCurrentSubmitMode(state.submitMode)
           setReadyStates(state.readyStates)
+          setFieldLocks(state.fieldLocks)
+
+          // Initialize our local timestamps from the server state
+          // This prevents us from overwriting server values with stale local edits
+          Object.entries(state.fieldValues).forEach(([fid, fv]) => {
+            fieldTimestamps.current[fid] = fv.updatedAt
+          })
+
           // Apply initial field values to DOM
-          Object.entries(state.fieldValues).forEach(([fid, fv]) =>
-            applyFieldUpdate(fid, fv.value),
-          )
+          // Use setTimeout to ensure DOM is ready (especially for newly joined users)
+          setTimeout(() => {
+            Object.entries(state.fieldValues).forEach(([fid, fv]) => {
+              // Skip fields that are currently focused by us
+              if (fid === focusedFieldRef.current) return
+              // Skip fields locked by others (we can't edit them anyway)
+              const lockOwner = state.fieldLocks[fid]
+              if (lockOwner && lockOwner !== userId) return
+
+              applyFieldUpdate(fid, fv.value)
+            })
+          }, 100)
+
           // Re-highlight any active drafts
           Object.keys(state.drafts).forEach((fid) => applyDraftHighlight(fid, true))
           break
@@ -271,14 +301,66 @@ export function CollaborationHarness({
               name: msg.name,
               color: msg.color,
               ...msg.position,
+              message: msg.message,
               lastSeen: Date.now(), // Client-side timestamp to handle throttling
             },
           }))
           break
         }
 
+        case 'FIELD_LOCKED': {
+          setFieldLocks((prev) => ({ ...prev, [msg.fieldId]: msg.userId }))
+          break
+        }
+
+        case 'FIELD_ACTIVITY': {
+          // Update activity timestamp for this field
+          fieldActivityTimestamps.current[msg.fieldId] = msg.timestamp
+          break
+        }
+
+        case 'FIELD_UNLOCKED': {
+          // Always update fieldLocks state to remove the lock
+          setFieldLocks((prev) => {
+            const next = { ...prev }
+            delete next[msg.fieldId]
+            return next
+          })
+
+          // If we're force-locking this field, don't blur (we're taking control)
+          if (forceLockingFieldRef.current === msg.fieldId) {
+            forceLockingFieldRef.current = null // Clear the flag
+            break // Don't blur our own field
+          }
+
+          // If we're currently focused on this field, we got kicked out - evict immediately
+          if (focusedFieldRef.current === msg.fieldId) {
+            const container = containerRef.current
+            if (container) {
+              const field = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+                `[name="${CSS.escape(msg.fieldId)}"], [id="${CSS.escape(msg.fieldId)}"]`
+              )
+              if (field) {
+                // Immediately disable the field to prevent further input
+                field.setAttribute('readonly', 'readonly')
+                field.style.backgroundColor = '#fecaca' // Red tint to show you've been kicked out
+                field.style.opacity = '0.6'
+
+                // Force blur if still focused
+                if (document.activeElement === field) {
+                  field.blur()
+                }
+                focusedFieldRef.current = null
+              }
+            }
+          }
+          break
+        }
+
         case 'REMOTE_FIELD_UPDATE': {
           if (msg.userId === userId) break
+          // Don't apply updates to fields we currently have focused
+          if (msg.fieldId === focusedFieldRef.current) break
           // CRDT-lite: only apply if the remote write is newer than our last local write
           const localTs = fieldTimestamps.current[msg.fieldId] ?? 0
           if (msg.timestamp > localTs) {
@@ -321,6 +403,23 @@ export function CollaborationHarness({
 
         case 'USER_JOIN': {
           setUsers((prev) => ({ ...prev, [msg.user.userId]: msg.user }))
+          break
+        }
+
+        case 'USER_UPDATED': {
+          setUsers((prev) => ({
+            ...prev,
+            [msg.userId]: { userId: msg.userId, name: msg.name, color: msg.color }
+          }))
+          // Update cursor info too
+          setRemoteCursors((prev) => {
+            const cursor = prev[msg.userId]
+            if (!cursor) return prev
+            return {
+              ...prev,
+              [msg.userId]: { ...cursor, name: msg.name, color: msg.color }
+            }
+          })
           break
         }
 
@@ -420,16 +519,18 @@ export function CollaborationHarness({
   const lastCursorPosition = useRef<CursorPosition | null>(null)
 
   const broadcastCursor = useCallback(
-    (e: MouseEvent) => {
+    (clientX: number, clientY: number) => {
       const container = containerRef.current
       if (!container) return
 
       const cRect = container.getBoundingClientRect()
-      const x = (e.clientX - cRect.left) / cRect.width
-      const y = (e.clientY - cRect.top) / cRect.height
+      const x = (clientX - cRect.left) / cRect.width
+      const y = (clientY - cRect.top) / cRect.height
 
       // Try to resolve field-relative coords
-      const target = e.target as HTMLElement
+      const target = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+      if (!target) return
+
       const fieldEl = target.closest<HTMLElement>(
         'input, textarea, select, button, [contenteditable]',
       )
@@ -443,8 +544,8 @@ export function CollaborationHarness({
         activeField = fieldEl.getAttribute('name') || fieldEl.id || undefined
         if (activeField) {
           const fRect = fieldEl.getBoundingClientRect()
-          fieldRelativeX = (e.clientX - fRect.left) / fRect.width
-          fieldRelativeY = (e.clientY - fRect.top) / fRect.height
+          fieldRelativeX = (clientX - fRect.left) / fRect.width
+          fieldRelativeY = (clientY - fRect.top) / fRect.height
         }
       }
 
@@ -466,12 +567,43 @@ export function CollaborationHarness({
       const now = Date.now()
       if (now - lastSent < CURSOR_THROTTLE_MS) return
       lastSent = now
-      broadcastCursor(e)
+      broadcastCursor(e.clientX, e.clientY)
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      // Only paint cursor on touch if cursor painting mode is enabled
+      if (!touchCursorMode) return
+
+      const now = Date.now()
+      if (now - lastSent < CURSOR_THROTTLE_MS) return
+      lastSent = now
+
+      const touch = e.touches[0]
+      if (touch) {
+        console.log('[TOUCH] Broadcasting cursor position:', touch.clientX, touch.clientY)
+        broadcastCursor(touch.clientX, touch.clientY)
+      }
+    }
+
+    function onTouchStart(e: TouchEvent) {
+      if (!touchCursorMode) return
+      console.log('[TOUCH] Touch started, mode:', touchCursorMode)
+
+      const touch = e.touches[0]
+      if (touch) {
+        broadcastCursor(touch.clientX, touch.clientY)
+      }
     }
 
     container.addEventListener('mousemove', onMouseMove)
-    return () => container.removeEventListener('mousemove', onMouseMove)
-  }, [disabled, connected, broadcastCursor])
+    container.addEventListener('touchstart', onTouchStart, { passive: true })
+    container.addEventListener('touchmove', onTouchMove, { passive: true })
+    return () => {
+      container.removeEventListener('mousemove', onMouseMove)
+      container.removeEventListener('touchstart', onTouchStart)
+      container.removeEventListener('touchmove', onTouchMove)
+    }
+  }, [disabled, connected, broadcastCursor, touchCursorMode])
 
   // ------------------------------------------------------------------
   // Re-broadcast cursor when tab becomes visible (fixes throttling)
@@ -505,6 +637,322 @@ export function CollaborationHarness({
     return () => clearInterval(interval)
   }, [disabled, connected, send])
 
+
+  // ------------------------------------------------------------------
+  // Double-click/tap to force-lock a field (kick out current user)
+  // Only allows eviction if current owner has been inactive for 3+ seconds
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (disabled || !connected) return
+    const container = containerRef.current
+    if (!container) return
+
+    let lastClickTime = 0
+    let lastClickedFieldId: string | null = null
+    const DOUBLE_CLICK_THRESHOLD_MS = 400
+    const INACTIVITY_THRESHOLD_MS = 3000 // Must be inactive for 3 seconds before eviction
+
+    function onMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      const fieldEl = target.closest<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+        'input, textarea, select',
+      )
+      if (!fieldEl || !container.contains(fieldEl)) {
+        // Clicked outside a field - reset tracking
+        lastClickTime = 0
+        lastClickedFieldId = null
+        return
+      }
+
+      const fieldId = fieldEl.getAttribute('name') || fieldEl.id
+      if (!fieldId) return
+
+      const now = Date.now()
+      const timeSinceLastClick = now - lastClickTime
+
+      // Check if this is a double-click on the same field within threshold
+      if (
+        lastClickedFieldId === fieldId &&
+        timeSinceLastClick > 0 &&
+        timeSinceLastClick < DOUBLE_CLICK_THRESHOLD_MS
+      ) {
+        // This is a double-click on the same field
+        const lockOwnerId = fieldLocks[fieldId]
+        if (lockOwnerId && lockOwnerId !== userId) {
+          console.log('[FORCE LOCK] Double-click detected on locked field:', fieldId, 'current owner:', lockOwnerId)
+
+          // Check when the current owner was last active
+          const lastActivity = fieldActivityTimestamps.current[fieldId] || 0
+          const timeSinceActivity = now - lastActivity
+
+          if (timeSinceActivity < INACTIVITY_THRESHOLD_MS) {
+            // Owner is still active - prevent eviction
+            console.log('[FORCE LOCK] Eviction blocked - owner active within', timeSinceActivity, 'ms')
+
+            // Prevent default to avoid text selection
+            e.preventDefault()
+            e.stopPropagation()
+
+            // Show visual feedback that eviction was blocked
+            setEvictionBlocked(fieldId)
+            setTimeout(() => setEvictionBlocked(null), 1500)
+
+            // Reset click tracking
+            lastClickTime = 0
+            lastClickedFieldId = null
+            return
+          }
+
+          console.log('[FORCE LOCK] Evicting inactive owner (inactive for', timeSinceActivity, 'ms)')
+
+          // Prevent default to avoid text selection
+          e.preventDefault()
+          e.stopPropagation()
+
+          // Force-lock the field, kicking out the current owner
+          forceLockingFieldRef.current = fieldId
+          focusedFieldRef.current = fieldId
+
+          // Optimistically update local state to show we own the lock
+          setFieldLocks((prev) => ({ ...prev, [fieldId]: userId }))
+
+          // Send force-lock message
+          send({ type: 'FORCE_FIELD_FOCUS', fieldId })
+
+          // Force focus on the field
+          setTimeout(() => {
+            fieldEl.focus()
+          }, 0)
+
+          // Remove readonly attribute and styling immediately for responsiveness
+          fieldEl.removeAttribute('readonly')
+          fieldEl.style.backgroundColor = ''
+          fieldEl.style.opacity = ''
+          fieldEl.style.cursor = ''
+
+          // Update cursor position
+          if (lastCursorPosition.current) {
+            lastCursorPosition.current = {
+              ...lastCursorPosition.current,
+              activeField: fieldId,
+              fieldRelativeX: 0.5,
+              fieldRelativeY: 0.5,
+            }
+            send({ type: 'CURSOR_MOVE', position: lastCursorPosition.current })
+          }
+
+          // Reset click tracking after successful double-click
+          lastClickTime = 0
+          lastClickedFieldId = null
+          return
+        }
+      }
+
+      // Update click tracking
+      lastClickTime = now
+      lastClickedFieldId = fieldId
+    }
+
+    // Use mousedown instead of click for more reliable detection
+    container.addEventListener('mousedown', onMouseDown, true)
+    return () => container.removeEventListener('mousedown', onMouseDown, true)
+  }, [fieldLocks, userId, disabled, connected, send])
+
+  // ------------------------------------------------------------------
+  // Track focus/blur to lock fields and update cursor activeField
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (disabled || !connected) return
+    const container = containerRef.current
+    if (!container) return
+
+    function onFocus(e: FocusEvent) {
+      const target = e.target as HTMLElement
+      const fieldEl = target.closest<HTMLElement>(
+        'input, textarea, select, button, [contenteditable]',
+      )
+      if (!fieldEl || !container!.contains(fieldEl)) return
+
+      const fieldId = fieldEl.getAttribute('name') || fieldEl.id
+      if (!fieldId) return
+
+      focusedFieldRef.current = fieldId
+      send({ type: 'FIELD_FOCUS', fieldId })
+
+      // Update cursor position to show we're at this field
+      if (lastCursorPosition.current) {
+        lastCursorPosition.current = {
+          ...lastCursorPosition.current,
+          activeField: fieldId,
+          fieldRelativeX: 0.5,
+          fieldRelativeY: 0.5,
+        }
+        send({ type: 'CURSOR_MOVE', position: lastCursorPosition.current })
+      }
+    }
+
+    function onBlur(e: FocusEvent) {
+      const target = e.target as HTMLElement
+      const fieldEl = target.closest<HTMLElement>(
+        'input, textarea, select, button, [contenteditable]',
+      )
+      if (!fieldEl || !container!.contains(fieldEl)) return
+
+      const fieldId = fieldEl.getAttribute('name') || fieldEl.id
+      if (!fieldId) return
+
+      focusedFieldRef.current = null
+      send({ type: 'FIELD_BLUR', fieldId })
+
+      // Clear activeField from cursor
+      if (lastCursorPosition.current) {
+        lastCursorPosition.current = {
+          ...lastCursorPosition.current,
+          activeField: undefined,
+          fieldRelativeX: undefined,
+          fieldRelativeY: undefined,
+        }
+        send({ type: 'CURSOR_MOVE', position: lastCursorPosition.current })
+      }
+    }
+
+    container.addEventListener('focusin', onFocus)
+    container.addEventListener('focusout', onBlur)
+    return () => {
+      container.removeEventListener('focusin', onFocus)
+      container.removeEventListener('focusout', onBlur)
+    }
+  }, [disabled, connected, send])
+
+  // ------------------------------------------------------------------
+  // Block input events on locked fields
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (disabled || !connected) return
+    const container = containerRef.current
+    if (!container) return
+
+    const blockLockedInput = (e: Event) => {
+      const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+      if (!('value' in target)) return
+
+      const fieldId = target.getAttribute('name') || target.id
+      if (!fieldId) return
+
+      // Check if this field is locked by someone else
+      const lockOwnerId = fieldLocks[fieldId]
+      if (lockOwnerId && lockOwnerId !== userId) {
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+        return false
+      }
+    }
+
+    // Use capture phase to intercept events before React handlers
+    container.addEventListener('input', blockLockedInput, true)
+    container.addEventListener('change', blockLockedInput, true)
+    container.addEventListener('keydown', blockLockedInput, true)
+    container.addEventListener('keypress', blockLockedInput, true)
+    container.addEventListener('keyup', blockLockedInput, true)
+    container.addEventListener('beforeinput', blockLockedInput, true)
+
+    return () => {
+      container.removeEventListener('input', blockLockedInput, true)
+      container.removeEventListener('change', blockLockedInput, true)
+      container.removeEventListener('keydown', blockLockedInput, true)
+      container.removeEventListener('keypress', blockLockedInput, true)
+      container.removeEventListener('keyup', blockLockedInput, true)
+      container.removeEventListener('beforeinput', blockLockedInput, true)
+    }
+  }, [fieldLocks, userId, disabled, connected])
+
+  // ------------------------------------------------------------------
+  // Apply visual styling to locked fields
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (disabled || !connected) return
+    const container = containerRef.current
+    if (!container) return
+
+    // Remove all lock styling first
+    const allFields = container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+      'input, textarea, select'
+    )
+    allFields.forEach((field) => {
+      // Only clear if this field isn't currently being edited by us
+      const fieldId = field.getAttribute('name') || field.id
+      if (fieldId && focusedFieldRef.current === fieldId) return // Don't touch our focused field
+
+      field.removeAttribute('readonly')
+      field.removeAttribute('data-locked-by')
+      field.style.backgroundColor = ''
+      field.style.opacity = ''
+      field.style.cursor = ''
+      field.title = ''
+      field.style.animation = ''
+    })
+
+    // Apply styling to locked fields
+    Object.entries(fieldLocks).forEach(([fieldId, lockOwnerId]) => {
+      if (lockOwnerId === userId) return // Don't style fields we own
+
+      const field = container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+        `[name="${CSS.escape(fieldId)}"], [id="${CSS.escape(fieldId)}"]`
+      )
+      if (!field) return
+
+      const lockOwner = users[lockOwnerId]
+      const ownerName = lockOwner?.name ?? 'Another user'
+
+      // Check if eviction is currently blocked for this field
+      const isEvictionBlocked = evictionBlocked === fieldId
+
+      // Set readonly and apply visual styling (gray = locked by someone else)
+      field.setAttribute('readonly', 'readonly')
+      field.setAttribute('data-locked-by', ownerName)
+
+      if (isEvictionBlocked) {
+        // Show red flash when eviction is blocked (user is still active)
+        field.style.backgroundColor = '#fca5a5' // Red tint
+        field.style.opacity = '0.9'
+        field.style.animation = 'shake 0.3s'
+        field.title = `⛔ ${ownerName} is actively typing - wait a moment before taking control.`
+      } else {
+        // Normal locked state
+        field.style.backgroundColor = '#f3f4f6' // Light gray background
+        field.style.opacity = '0.7'
+        field.title = `🔒 ${ownerName} is editing this field. Double-click to take control (if inactive).`
+      }
+
+      field.style.cursor = 'not-allowed'
+    })
+  }, [fieldLocks, userId, users, disabled, connected, evictionBlocked])
+
+  // Add shake animation keyframes
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    const styleId = 'collab-harness-animations'
+    if (document.getElementById(styleId)) return
+
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = `
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
+      }
+    `
+    document.head.appendChild(style)
+
+    return () => {
+      const existing = document.getElementById(styleId)
+      if (existing) document.head.removeChild(existing)
+    }
+  }, [])
+
   // ------------------------------------------------------------------
   // Intercept local form edits and broadcast them
   // ------------------------------------------------------------------
@@ -512,6 +960,9 @@ export function CollaborationHarness({
     if (disabled || !connected) return
     const container = containerRef.current
     if (!container) return
+
+    // Track when we last sent activity for each field (throttle to max 1 per second)
+    const lastActivityBroadcast: Record<string, number> = {}
 
     function onInput(e: Event) {
       const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -522,8 +973,16 @@ export function CollaborationHarness({
 
       const timestamp = Date.now()
       fieldTimestamps.current[fieldId] = timestamp
+      fieldActivityTimestamps.current[fieldId] = timestamp // Update our own activity
 
       send({ type: 'UPDATE_FIELD', fieldId, value: target.value, timestamp })
+
+      // Broadcast activity periodically (max once per second) so others know we're typing
+      const lastBroadcast = lastActivityBroadcast[fieldId] || 0
+      if (timestamp - lastBroadcast > 1000) {
+        send({ type: 'FIELD_ACTIVITY', fieldId })
+        lastActivityBroadcast[fieldId] = timestamp
+      }
 
       // If this field had a draft, typing over it implicitly rejects it
       setDrafts((prev) => {
@@ -587,6 +1046,34 @@ export function CollaborationHarness({
     setReadyStates((prev) => ({ ...prev, [userId]: false }))
   }, [send, userId])
 
+  const updateUser = useCallback((newName: string, newColor: string) => {
+    setName(newName)
+    setColor(newColor)
+    send({ type: 'UPDATE_USER', name: newName, color: newColor })
+    // Immediately broadcast cursor position so others see updated name/color
+    if (lastCursorPosition.current) {
+      setTimeout(() => {
+        if (lastCursorPosition.current) {
+          send({ type: 'CURSOR_MOVE', position: lastCursorPosition.current })
+        }
+      }, 100)
+    }
+  }, [send])
+
+  const setCursorMessage = useCallback((message: string) => {
+    setCursorMessageState(message)
+    send({ type: 'SET_CURSOR_MESSAGE', message })
+    // Immediately broadcast current cursor position with new message
+    // Use a small delay to ensure SET_CURSOR_MESSAGE is processed first
+    if (lastCursorPosition.current) {
+      setTimeout(() => {
+        if (lastCursorPosition.current) {
+          send({ type: 'CURSOR_MOVE', position: lastCursorPosition.current })
+        }
+      }, 100)
+    }
+  }, [send])
+
   // ------------------------------------------------------------------
   // Context value
   // ------------------------------------------------------------------
@@ -596,13 +1083,18 @@ export function CollaborationHarness({
       userId,
       userName: name,
       userColor: color,
+      cursorMessage,
       submitMode: currentSubmitMode,
       users,
       readyStates,
       markReady,
       unmarkReady,
+      updateUser,
+      setCursorMessage,
+      touchCursorMode,
+      setTouchCursorMode,
     }),
-    [connected, userId, name, color, currentSubmitMode, users, readyStates, markReady, unmarkReady],
+    [connected, userId, name, color, cursorMessage, currentSubmitMode, users, readyStates, markReady, unmarkReady, updateUser, setCursorMessage, touchCursorMode],
   )
 
   // ------------------------------------------------------------------
@@ -616,11 +1108,16 @@ export function CollaborationHarness({
       userId: '',
       userName: '',
       userColor: '',
+      cursorMessage: '',
       submitMode: 'any',
       users: {},
       readyStates: {},
       markReady: () => {},
       unmarkReady: () => {},
+      updateUser: () => {},
+      setCursorMessage: () => {},
+      touchCursorMode: false,
+      setTouchCursorMode: () => {},
     }),
     [],
   )

@@ -7,6 +7,17 @@ interface GhostCursorProps {
 }
 
 /**
+ * Extract initials from a name (e.g., "Chris Santa" → "CS")
+ */
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) {
+    return parts[0].substring(0, 2).toUpperCase()
+  }
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+/**
  * Renders a remote user's cursor as a fixed-position SVG pointer + name badge.
  *
  * Coordinate strategy (per spec):
@@ -86,6 +97,10 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
     }
   }, [cursor, containerRef])
 
+  const initials = getInitials(cursor.name)
+  const hasMessage = cursor.message && cursor.message.trim().length > 0
+  const showMessage = hasMessage // Always show message when it exists
+
   return (
     <div
       className="ghost-cursor"
@@ -116,26 +131,57 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
           strokeLinejoin="round"
         />
       </svg>
-      {/* Name badge */}
-      <span
+      {/* Initials badge */}
+      <div
         style={{
-          display: 'block',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
           marginTop: 2,
           marginLeft: 10,
-          backgroundColor: cursor.color,
-          color: '#fff',
-          padding: '2px 7px',
-          borderRadius: 4,
-          fontSize: 11,
-          fontWeight: 700,
-          fontFamily: 'system-ui, sans-serif',
-          whiteSpace: 'nowrap',
-          lineHeight: 1.5,
-          boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
         }}
       >
-        {cursor.name}
-      </span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: cursor.color,
+            color: '#fff',
+            padding: '3px 6px',
+            borderRadius: 4,
+            fontSize: 10,
+            fontWeight: 700,
+            fontFamily: 'system-ui, sans-serif',
+            lineHeight: 1,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+            minWidth: 24,
+          }}
+        >
+          {initials}
+        </span>
+        {/* Coaching message (only when not in a field) */}
+        {showMessage && (
+          <span
+            style={{
+              display: 'inline-block',
+              backgroundColor: 'rgba(0, 0, 0, 0.85)',
+              color: '#fff',
+              padding: '4px 8px',
+              borderRadius: 6,
+              fontSize: 12,
+              fontFamily: 'system-ui, sans-serif',
+              whiteSpace: 'nowrap',
+              maxWidth: 300,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            }}
+          >
+            {cursor.message}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

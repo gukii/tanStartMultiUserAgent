@@ -25,6 +25,7 @@ export interface UserInfo {
 
 export interface CursorState extends UserInfo, CursorPosition {
   lastSeen: number
+  message?: string // Optional coaching message shown next to cursor
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +79,7 @@ export interface RoomState {
   drafts: Record<string, DraftSuggestion>
   submitMode: 'any' | 'consensus'
   readyStates: Record<string, boolean> // userId -> isReady
+  fieldLocks: Record<string, string> // fieldId -> userId who has focus
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +104,13 @@ export interface NormalBehaviorData {
 /** Messages the client sends to the server */
 export type ClientMessage =
   | { type: 'IDENTIFY'; userId: string; name: string; color: string }
+  | { type: 'UPDATE_USER'; name: string; color: string }
+  | { type: 'SET_CURSOR_MESSAGE'; message: string }
   | { type: 'CURSOR_MOVE'; position: CursorPosition }
+  | { type: 'FIELD_FOCUS'; fieldId: string }
+  | { type: 'FIELD_BLUR'; fieldId: string }
+  | { type: 'FIELD_ACTIVITY'; fieldId: string } // Notify others that we're actively typing
+  | { type: 'FORCE_FIELD_FOCUS'; fieldId: string } // Double-click to steal lock
   | { type: 'UPDATE_FIELD'; fieldId: string; value: string; timestamp: number }
   | { type: 'PAGE_SCHEMA'; schema: FieldSchema[] }
   | { type: 'DRAFT_FIELD'; fieldId: string; value: string; source: string; reason?: string }
@@ -117,7 +125,11 @@ export type ServerMessage =
   | { type: 'ROOM_STATE'; state: RoomState }
   | { type: 'USER_JOIN'; user: UserInfo }
   | { type: 'USER_LEAVE'; userId: string }
-  | { type: 'REMOTE_CURSOR'; userId: string; position: CursorPosition; name: string; color: string }
+  | { type: 'USER_UPDATED'; userId: string; name: string; color: string }
+  | { type: 'REMOTE_CURSOR'; userId: string; position: CursorPosition; name: string; color: string; message?: string }
+  | { type: 'FIELD_LOCKED'; fieldId: string; userId: string; userName: string }
+  | { type: 'FIELD_UNLOCKED'; fieldId: string }
+  | { type: 'FIELD_ACTIVITY'; fieldId: string; userId: string; timestamp: number }
   | { type: 'REMOTE_FIELD_UPDATE'; fieldId: string; value: string; userId: string; timestamp: number }
   | { type: 'REMOTE_PAGE_SCHEMA'; schema: FieldSchema[]; userId: string }
   | { type: 'REMOTE_DRAFT'; fieldId: string; value: string; source: string; reason?: string }
