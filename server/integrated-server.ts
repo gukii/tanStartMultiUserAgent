@@ -364,27 +364,9 @@ app.get('/health', (req, res) => {
   })
 })
 
-// Proxy all other HTTP requests to TanStack Start server (except /health)
-app.use(
-  createProxyMiddleware({
-    target: `http://127.0.0.1:${TANSTACK_PORT}`,
-    changeOrigin: true,
-    ws: false, // Don't proxy WebSocket upgrades
-    filter: (pathname) => pathname !== '/health', // Don't proxy health check
-    onError: (err, req, res) => {
-      console.error('[Proxy] Error:', err.message)
-      if (!res.headersSent) {
-        res.status(502).json({ error: 'TanStack server not available' })
-      }
-    },
-    onProxyReq: (proxyReq, req) => {
-      // Log proxied requests in development
-      if (!IS_PRODUCTION) {
-        console.log(`[Proxy] ${req.method} ${req.url} -> TanStack:${TANSTACK_PORT}`)
-      }
-    },
-  }),
-)
+// Placeholder - will be configured in start() function
+// In dev: proxy to TanStack Start
+// In prod: serve static files
 
 const server = createServer(app)
 
@@ -442,10 +424,45 @@ setInterval(() => roomManager.removeEmptyRooms(), 60000)
 
 async function start() {
   try {
-    // Start TanStack server first
-    await startTanStackServer()
+    if (IS_PRODUCTION) {
+      // In production, serve static files
+      const path = await import('path')
+      const { fileURLToPath } = await import('url')
+      const __dirname = path.dirname(fileURLToPath(import.meta.url))
+      const clientPath = path.resolve(__dirname, '../dist/client')
 
-    // Then start the integrated server
+      console.log(`[Static] Serving from: ${clientPath}`)
+
+      app.use(express.static(clientPath))
+
+      // Fallback to index.html for client-side routing
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(clientPath, 'index.html'))
+      })
+    } else {
+      // In development, start TanStack and proxy to it
+      await startTanStackServer()
+
+      app.use(
+        createProxyMiddleware({
+          target: `http://127.0.0.1:${TANSTACK_PORT}`,
+          changeOrigin: true,
+          ws: false,
+          filter: (pathname) => pathname !== '/health',
+          onError: (err, req, res) => {
+            console.error('[Proxy] Error:', err.message)
+            if (!res.headersSent) {
+              res.status(502).json({ error: 'TanStack server not available' })
+            }
+          },
+          onProxyReq: (proxyReq, req) => {
+            console.log(`[Proxy] ${req.method} ${req.url} -> TanStack:${TANSTACK_PORT}`)
+          },
+        }),
+      )
+    }
+
+    // Start the integrated server
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
       console.log(`🚀 Integrated Server running`)
@@ -455,9 +472,13 @@ async function start() {
       console.log(`Health Check:  http://localhost:${PORT}/health`)
       console.log(`WebSocket:     ws://localhost:${PORT}/parties/main/:roomId`)
       console.log(``)
-      console.log(`TanStack Start → http://127.0.0.1:${TANSTACK_PORT} (internal)`)
+      if (IS_PRODUCTION) {
+        console.log(`Static Files → Serving from dist/client`)
+      } else {
+        console.log(`TanStack Start → http://127.0.0.1:${TANSTACK_PORT} (internal)`)
+        console.log(`HTTP Proxy → Forwards requests to TanStack`)
+      }
       console.log(`WebSocket Server → Handles /parties/main/* paths`)
-      console.log(`HTTP Proxy → Forwards other requests to TanStack`)
       console.log(``)
       console.log(`Ready for connections!`)
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
