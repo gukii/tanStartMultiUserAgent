@@ -4,3 +4,4 @@ Stay within project folder unless told otherwise
 
 Look into folder ../p2pform3 to see how to setup "tantstack start" and sqlite (libsql) and to learn how to create server functions, api functions etc
 
+use bash not on any folders outside the project folder

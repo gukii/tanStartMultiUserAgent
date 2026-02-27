@@ -234,7 +234,7 @@ function CheckoutForm() {
 // ---------------------------------------------------------------------------
 
 interface SimulatorPanelProps {
-  partyKitHost: string
+  partyKitHost?: string
   roomId: string
 }
 
@@ -254,10 +254,11 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
 
   function sendDraft(fieldId: string, value: string, reason: string) {
     // Connect as an AI Agent and push a DRAFT_FIELD message
-    const wsProto = partyKitHost.startsWith('localhost') || partyKitHost.startsWith('127.')
+    const host = partyKitHost ?? window.location.host
+    const wsProto = host.startsWith('localhost') || host.startsWith('127.')
       ? 'ws'
       : 'wss'
-    const url = `${wsProto}://${partyKitHost}/parties/main/${encodeURIComponent(roomId)}?userId=ai-agent&name=AI%20Assistant&color=%238b5cf6`
+    const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(roomId)}?userId=ai-agent&name=AI%20Assistant&color=%238b5cf6`
     const ws = new WebSocket(url)
     ws.onopen = () => {
       ws.send(JSON.stringify({
@@ -418,7 +419,8 @@ function QuickCursorMessageInput() {
 // ---------------------------------------------------------------------------
 
 function DemoPage() {
-  const partyKitHost = import.meta.env.VITE_PARTYKIT_HOST as string ?? '127.0.0.1:1999'
+  // No partyKitHost needed - auto-detects from window.location.host
+  const partyKitHost = import.meta.env.VITE_PARTYKIT_HOST as string | undefined
   const roomId = 'room-demo'
   const [submitMode, setSubmitMode] = useState<'any' | 'consensus'>('any')
   const [settingsOpen, setSettingsOpen] = useState(false)

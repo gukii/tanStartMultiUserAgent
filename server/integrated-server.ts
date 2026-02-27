@@ -314,10 +314,11 @@ function startTanStackServer(): Promise<void> {
 
     // In production, use vite preview to serve the built app
     // In development, run the dev server
+    // Always bind to 127.0.0.1 (IPv4) to ensure proxy can connect
     const command = 'pnpm'
     const args = IS_PRODUCTION
       ? ['vite', 'preview', '--port', TANSTACK_PORT.toString(), '--host', '127.0.0.1']
-      : ['vite', 'dev', '--port', TANSTACK_PORT.toString()]
+      : ['vite', 'dev', '--port', TANSTACK_PORT.toString(), '--host', '127.0.0.1']
 
     tanstackProcess = spawn(command, args, {
       env,
@@ -380,13 +381,17 @@ const wss = new WebSocketServer({
 // Handle WebSocket upgrade requests
 server.on('upgrade', (request, socket, head) => {
   const pathname = request.url?.split('?')[0]
+  console.log(`[WebSocket] Upgrade request: ${request.url}`)
+  console.log(`[WebSocket] Pathname: ${pathname}`)
 
   // Only handle WebSocket upgrades for /parties/main/:roomId paths
   if (pathname && pathname.match(/^\/parties\/main\/.+$/)) {
+    console.log(`[WebSocket] ✓ Accepting upgrade for ${pathname}`)
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request)
     })
   } else {
+    console.log(`[WebSocket] ✗ Rejecting upgrade for ${pathname} (doesn't match pattern)`)
     socket.destroy()
   }
 })
@@ -398,6 +403,11 @@ wss.on('connection', (ws, req) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`)
   const queryParams = url.searchParams
   const userId = queryParams.get('userId') || `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  const userName = queryParams.get('name') || 'Anonymous'
+
+  console.log(`[WebSocket] ✓ Connection established`)
+  console.log(`[WebSocket]   Room: ${roomId}`)
+  console.log(`[WebSocket]   User: ${userName} (${userId})`)
 
   const room = roomManager.getRoom(roomId)
   room.addClient(userId, ws, queryParams)

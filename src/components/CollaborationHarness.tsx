@@ -27,7 +27,7 @@ import {
   useState,
   type RefObject,
 } from 'react'
-import PartySocket from 'partysocket'
+// import PartySocket from 'partysocket' // Removed: using native WebSocket for self-hosted server
 import { nanoid } from 'nanoid'
 import { useMultiplayerMap } from '../hooks/useMultiplayerMap'
 import { GhostCursor } from './GhostCursor'
@@ -131,7 +131,7 @@ export function CollaborationHarness({
   onSchemaUpdate,
 }: CollaborationHarnessProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const socketRef = useRef<PartySocket | null>(null)
+  const socketRef = useRef<WebSocket | null>(null)
 
   // Stable per-session identity (client-side only to avoid hydration mismatch)
   const [userId, setUserId] = useState<string>('')
@@ -467,20 +467,26 @@ export function CollaborationHarness({
   useEffect(() => {
     if (disabled || !userId) return // Wait for userId to be generated
 
-    // Determine WebSocket host
-    // Priority: prop > env var > same origin (for self-hosted) > localhost fallback
-    const host =
-      partyKitHost ??
-      (typeof import.meta.env !== 'undefined'
-        ? (import.meta.env.VITE_PARTYKIT_HOST as string | undefined)
-        : undefined) ??
-      (typeof window !== 'undefined' ? window.location.host : '127.0.0.1:1999')
+    // Build WebSocket URL for self-hosted server
+    // Uses /parties/main/:roomId path
+    console.log('[DEBUG] window.location.href:', window.location.href)
+    console.log('[DEBUG] window.location.host:', window.location.host)
+    console.log('[DEBUG] window.location.hostname:', window.location.hostname)
+    console.log('[DEBUG] window.location.port:', window.location.port)
+    console.log('[DEBUG] partyKitHost:', partyKitHost)
+    console.log('[DEBUG] VITE_PARTYKIT_HOST:', import.meta.env.VITE_PARTYKIT_HOST)
 
-    const socket = new PartySocket({
-      host,
-      room: resolvedRoomId,
-      party: 'main', // Our WebSocket server uses /parties/main/:roomId
-      query: { userId, name, color },
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = partyKitHost ?? (import.meta.env.VITE_PARTYKIT_HOST as string | undefined) ?? window.location.host
+    const queryString = new URLSearchParams({ userId, name, color }).toString()
+    const wsUrl = `${wsProtocol}//${host}/parties/main/${resolvedRoomId}?${queryString}`
+
+    console.log('[CollaborationHarness] Final host:', host)
+    console.log('[CollaborationHarness] Connecting to:', wsUrl)
+
+    const socket = new WebSocket(wsUrl)
+    socket.addEventListener('error', (error) => {
+      console.error('[CollaborationHarness] WebSocket error:', error)
     })
     socketRef.current = socket
 
