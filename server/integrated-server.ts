@@ -424,8 +424,12 @@ setInterval(() => roomManager.removeEmptyRooms(), 60000)
 
 async function start() {
   try {
+    console.log(`[DEBUG] IS_PRODUCTION = ${IS_PRODUCTION}`)
+    console.log(`[DEBUG] NODE_ENV = ${process.env.NODE_ENV}`)
+
     if (IS_PRODUCTION) {
       // In production, serve static files
+      console.log(`[Production] Setting up static file serving (NO TanStack spawn)`)
       const path = await import('path')
       const { fileURLToPath } = await import('url')
       const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -441,6 +445,7 @@ async function start() {
       })
     } else {
       // In development, start TanStack and proxy to it
+      console.log(`[Development] Starting TanStack process and setting up proxy`)
       await startTanStackServer()
 
       app.use(
