@@ -312,10 +312,12 @@ function startTanStackServer(): Promise<void> {
       HOST: '127.0.0.1', // Internal only
     }
 
-    // In production, run the built server
-    // In development, run the dev server with correct port
-    const command = IS_PRODUCTION ? 'node' : 'pnpm'
-    const args = IS_PRODUCTION ? ['dist/server/server.js'] : ['vite', 'dev', '--port', TANSTACK_PORT.toString()]
+    // In production, use vite preview to serve the built app
+    // In development, run the dev server
+    const command = 'pnpm'
+    const args = IS_PRODUCTION
+      ? ['vite', 'preview', '--port', TANSTACK_PORT.toString(), '--host', '127.0.0.1']
+      : ['vite', 'dev', '--port', TANSTACK_PORT.toString()]
 
     tanstackProcess = spawn(command, args, {
       env,
@@ -427,45 +429,30 @@ async function start() {
     console.log(`[DEBUG] IS_PRODUCTION = ${IS_PRODUCTION}`)
     console.log(`[DEBUG] NODE_ENV = ${process.env.NODE_ENV}`)
 
-    if (IS_PRODUCTION) {
-      // In production, serve static files
-      console.log(`[Production] Setting up static file serving (NO TanStack spawn)`)
-      const path = await import('path')
-      const { fileURLToPath } = await import('url')
-      const __dirname = path.dirname(fileURLToPath(import.meta.url))
-      const clientPath = path.resolve(__dirname, '../dist/client')
+    // Always start TanStack Start server and proxy to it
+    // (TanStack Start is an SSR framework, needs to run as a server)
+    console.log(`[Startup] Starting TanStack Start server...`)
+    await startTanStackServer()
 
-      console.log(`[Static] Serving from: ${clientPath}`)
-
-      app.use(express.static(clientPath))
-
-      // Fallback to index.html for client-side routing (Express 5 compatible)
-      app.use((req, res) => {
-        res.sendFile(path.join(clientPath, 'index.html'))
-      })
-    } else {
-      // In development, start TanStack and proxy to it
-      console.log(`[Development] Starting TanStack process and setting up proxy`)
-      await startTanStackServer()
-
-      app.use(
-        createProxyMiddleware({
-          target: `http://127.0.0.1:${TANSTACK_PORT}`,
-          changeOrigin: true,
-          ws: false,
-          filter: (pathname) => pathname !== '/health',
-          onError: (err, req, res) => {
-            console.error('[Proxy] Error:', err.message)
-            if (!res.headersSent) {
-              res.status(502).json({ error: 'TanStack server not available' })
-            }
-          },
-          onProxyReq: (proxyReq, req) => {
+    app.use(
+      createProxyMiddleware({
+        target: `http://127.0.0.1:${TANSTACK_PORT}`,
+        changeOrigin: true,
+        ws: false,
+        filter: (pathname) => pathname !== '/health',
+        onError: (err, req, res) => {
+          console.error('[Proxy] Error:', err.message)
+          if (!res.headersSent) {
+            res.status(502).json({ error: 'TanStack server not available' })
+          }
+        },
+        onProxyReq: (proxyReq, req) => {
+          if (!IS_PRODUCTION) {
             console.log(`[Proxy] ${req.method} ${req.url} -> TanStack:${TANSTACK_PORT}`)
-          },
-        }),
-      )
-    }
+          }
+        },
+      }),
+    )
 
     // Start the integrated server
     server.listen(PORT, '0.0.0.0', () => {
