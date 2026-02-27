@@ -439,8 +439,8 @@ async function start() {
 
       app.use(express.static(clientPath))
 
-      // Fallback to index.html for client-side routing
-      app.get('*', (req, res) => {
+      // Fallback to index.html for client-side routing (Express 5 compatible)
+      app.use((req, res) => {
         res.sendFile(path.join(clientPath, 'index.html'))
       })
     } else {
