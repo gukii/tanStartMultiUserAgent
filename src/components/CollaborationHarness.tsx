@@ -467,16 +467,19 @@ export function CollaborationHarness({
   useEffect(() => {
     if (disabled || !userId) return // Wait for userId to be generated
 
+    // Determine WebSocket host
+    // Priority: prop > env var > same origin (for self-hosted) > localhost fallback
     const host =
       partyKitHost ??
       (typeof import.meta.env !== 'undefined'
         ? (import.meta.env.VITE_PARTYKIT_HOST as string | undefined)
         : undefined) ??
-      '127.0.0.1:1999'
+      (typeof window !== 'undefined' ? window.location.host : '127.0.0.1:1999')
 
     const socket = new PartySocket({
       host,
       room: resolvedRoomId,
+      party: 'main', // Our WebSocket server uses /parties/main/:roomId
       query: { userId, name, color },
     })
     socketRef.current = socket
