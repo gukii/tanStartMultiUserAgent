@@ -161,6 +161,7 @@ export function CollaborationHarness({
   const focusedFieldRef = useRef<string | null>(null) // Track which field we have focused
   const forceLockingFieldRef = useRef<string | null>(null) // Track field we're force-locking (ignore next FIELD_UNLOCKED)
   const [touchCursorMode, setTouchCursorMode] = useState(false) // Toggle for touch cursor painting
+  const [touchCursorPosition, setTouchCursorPosition] = useState<{ x: number; y: number } | null>(null) // Visual cursor position for touch mode
   const fieldActivityTimestamps = useRef<Record<string, number>>({}) // Track last activity time per field per user (fieldId -> timestamp)
   const [evictionBlocked, setEvictionBlocked] = useState<string | null>(null) // Track which field eviction was blocked for (show visual feedback)
 
@@ -579,38 +580,99 @@ export function CollaborationHarness({
       broadcastCursor(e.clientX, e.clientY)
     }
 
+    // Helper to check if element or any ancestor is interactive
+    function isInteractiveElement(element: Element | null): boolean {
+      if (!element) return false
+
+      const interactive = ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A']
+      let current: Element | null = element
+
+      while (current) {
+        if (interactive.includes(current.tagName)) return true
+        if (current.hasAttribute('onclick')) return true
+        if (current.classList.contains('cursor-pointer')) return true
+        current = current.parentElement
+      }
+
+      return false
+    }
+
     function onTouchMove(e: TouchEvent) {
       // Only paint cursor on touch if cursor painting mode is enabled
       if (!touchCursorMode) return
 
-      const now = Date.now()
-      if (now - lastSent < CURSOR_THROTTLE_MS) return
-      lastSent = now
+      // Allow two-finger scrolling, only prevent single-finger scrolling
+      if (e.touches.length === 1) {
+        const touch = e.touches[0]
+        const target = document.elementFromPoint(touch.clientX, touch.clientY)
 
-      const touch = e.touches[0]
-      if (touch) {
+        // Update visual cursor position (account for visual viewport offset on mobile)
+        const visualViewport = (window as any).visualViewport
+        const offsetX = visualViewport ? visualViewport.offsetLeft : 0
+        const offsetY = visualViewport ? visualViewport.offsetTop : 0
+
+        setTouchCursorPosition({
+          x: touch.clientX + offsetX,
+          y: touch.clientY + offsetY,
+        })
+
+        // Don't prevent default on interactive elements (allows clicking/typing)
+        if (!isInteractiveElement(target)) {
+          e.preventDefault() // Prevent single-finger scroll on non-interactive areas
+        }
+
+        const now = Date.now()
+        if (now - lastSent < CURSOR_THROTTLE_MS) return
+        lastSent = now
+
         console.log('[TOUCH] Broadcasting cursor position:', touch.clientX, touch.clientY)
         broadcastCursor(touch.clientX, touch.clientY)
+      } else {
+        // Hide visual cursor during two-finger scroll
+        setTouchCursorPosition(null)
       }
+      // If e.touches.length > 1, allow native two-finger scroll
     }
 
     function onTouchStart(e: TouchEvent) {
       if (!touchCursorMode) return
+
       console.log('[TOUCH] Touch started, mode:', touchCursorMode)
 
-      const touch = e.touches[0]
-      if (touch) {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0]
+
+        // Show visual cursor (account for visual viewport offset)
+        const visualViewport = (window as any).visualViewport
+        const offsetX = visualViewport ? visualViewport.offsetLeft : 0
+        const offsetY = visualViewport ? visualViewport.offsetTop : 0
+
+        setTouchCursorPosition({
+          x: touch.clientX + offsetX,
+          y: touch.clientY + offsetY,
+        })
+
         broadcastCursor(touch.clientX, touch.clientY)
       }
     }
 
+    function onTouchEnd() {
+      if (!touchCursorMode) return
+      // Hide visual cursor when touch ends
+      setTouchCursorPosition(null)
+    }
+
     container.addEventListener('mousemove', onMouseMove)
     container.addEventListener('touchstart', onTouchStart, { passive: true })
-    container.addEventListener('touchmove', onTouchMove, { passive: true })
+    container.addEventListener('touchmove', onTouchMove, { passive: false })
+    container.addEventListener('touchend', onTouchEnd, { passive: true })
+    container.addEventListener('touchcancel', onTouchEnd, { passive: true })
     return () => {
       container.removeEventListener('mousemove', onMouseMove)
       container.removeEventListener('touchstart', onTouchStart)
       container.removeEventListener('touchmove', onTouchMove)
+      container.removeEventListener('touchend', onTouchEnd)
+      container.removeEventListener('touchcancel', onTouchEnd)
     }
   }, [disabled, connected, broadcastCursor, touchCursorMode])
 
@@ -877,6 +939,49 @@ export function CollaborationHarness({
   }, [fieldLocks, userId, disabled, connected])
 
   // ------------------------------------------------------------------
+  // Helper functions for editor badges
+  // ------------------------------------------------------------------
+  const addEditorBadge = useCallback((field: HTMLElement, userName: string, userColor: string) => {
+    // Remove existing badge if any
+    const existingBadge = field.parentElement?.querySelector('.collab-editor-badge')
+    if (existingBadge) existingBadge.remove()
+
+    // Create badge
+    const badge = document.createElement('div')
+    badge.className = 'collab-editor-badge'
+    badge.textContent = userName
+    badge.style.cssText = `
+      position: absolute;
+      top: -8px;
+      left: 8px;
+      background: ${userColor};
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    `
+
+    // Ensure parent has position relative
+    if (field.parentElement) {
+      const parentStyle = window.getComputedStyle(field.parentElement)
+      if (parentStyle.position === 'static') {
+        field.parentElement.style.position = 'relative'
+      }
+      field.parentElement.appendChild(badge)
+    }
+  }, [])
+
+  const removeEditorBadge = useCallback((field: HTMLElement) => {
+    const badge = field.parentElement?.querySelector('.collab-editor-badge')
+    if (badge) badge.remove()
+  }, [])
+
+  // ------------------------------------------------------------------
   // Apply visual styling to locked fields
   // ------------------------------------------------------------------
   useEffect(() => {
@@ -895,11 +1000,16 @@ export function CollaborationHarness({
 
       field.removeAttribute('readonly')
       field.removeAttribute('data-locked-by')
+      field.removeAttribute('data-locked-by-color')
       field.style.backgroundColor = ''
+      field.style.borderColor = ''
+      field.style.borderWidth = ''
+      field.style.borderStyle = ''
       field.style.opacity = ''
       field.style.cursor = ''
       field.title = ''
       field.style.animation = ''
+      removeEditorBadge(field)
     })
 
     // Apply styling to locked fields
@@ -913,30 +1023,41 @@ export function CollaborationHarness({
 
       const lockOwner = users[lockOwnerId]
       const ownerName = lockOwner?.name ?? 'Another user'
+      const ownerColor = lockOwner?.color ?? '#6b7280'
 
       // Check if eviction is currently blocked for this field
       const isEvictionBlocked = evictionBlocked === fieldId
 
-      // Set readonly and apply visual styling (gray = locked by someone else)
+      // Set readonly and apply visual styling with colored border
       field.setAttribute('readonly', 'readonly')
       field.setAttribute('data-locked-by', ownerName)
+      field.setAttribute('data-locked-by-color', ownerColor)
 
       if (isEvictionBlocked) {
         // Show red flash when eviction is blocked (user is still active)
         field.style.backgroundColor = '#fca5a5' // Red tint
+        field.style.borderColor = '#ef4444'
+        field.style.borderWidth = '2px'
+        field.style.borderStyle = 'solid'
         field.style.opacity = '0.9'
         field.style.animation = 'shake 0.3s'
         field.title = `⛔ ${ownerName} is actively typing - wait a moment before taking control.`
       } else {
-        // Normal locked state
-        field.style.backgroundColor = '#f3f4f6' // Light gray background
-        field.style.opacity = '0.7'
+        // Normal locked state - colored border matching the user
+        field.style.backgroundColor = '#f9fafb' // Very light gray
+        field.style.borderColor = ownerColor
+        field.style.borderWidth = '2px'
+        field.style.borderStyle = 'solid'
+        field.style.opacity = '0.85'
         field.title = `🔒 ${ownerName} is editing this field. Double-click to take control (if inactive).`
       }
 
       field.style.cursor = 'not-allowed'
+
+      // Add a small badge showing who's editing
+      addEditorBadge(field, ownerName, ownerColor)
     })
-  }, [fieldLocks, userId, users, disabled, connected, evictionBlocked])
+  }, [fieldLocks, userId, users, disabled, connected, evictionBlocked, addEditorBadge, removeEditorBadge])
 
   // Add shake animation keyframes
   useEffect(() => {
@@ -1178,6 +1299,55 @@ export function CollaborationHarness({
           onReject={handleReject}
         />
       ))}
+
+      {/* Visual cursor for touch painting mode */}
+      {touchCursorMode && touchCursorPosition && (
+        <div
+          style={{
+            position: 'fixed',
+            left: touchCursorPosition.x,
+            top: touchCursorPosition.y + 25, // Offset 25px below finger (visible but not too far)
+            width: 24,
+            height: 24,
+            pointerEvents: 'none',
+            zIndex: 9999,
+            transform: 'translate(-50%, -50%)',
+            willChange: 'transform', // Optimize for smooth movement
+          }}
+          aria-hidden="true"
+        >
+          {/* Crosshair cursor */}
+          <div
+            style={{
+              position: 'absolute',
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              border: `2px solid ${color}`,
+              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 2,
+              height: 24,
+              left: 11,
+              backgroundColor: color,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 24,
+              height: 2,
+              top: 11,
+              backgroundColor: color,
+            }}
+          />
+        </div>
+      )}
 
       {/* Tiny connection-status dot */}
       <div
