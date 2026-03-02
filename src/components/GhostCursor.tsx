@@ -54,6 +54,14 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
       if (!container) return
       const cRect = container.getBoundingClientRect()
 
+      // Get local scroll position
+      const localScrollX = window.scrollX || window.pageXOffset || 0
+      const localScrollY = window.scrollY || window.pageYOffset || 0
+
+      // Get sender's scroll context (default 0 for backward compatibility)
+      const senderScrollX = cursor.scrollX ?? 0
+      const senderScrollY = cursor.scrollY ?? 0
+
       let left: number
       let top: number
 
@@ -62,22 +70,28 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
         cursor.fieldRelativeX !== undefined &&
         cursor.fieldRelativeY !== undefined
       ) {
-        // Prefer field-relative positioning (prioritize name over id)
+        // Field-relative positioning (best accuracy across devices)
         const fieldEl = container.querySelector<HTMLElement>(
           `[name="${CSS.escape(cursor.activeField)}"], [id="${CSS.escape(cursor.activeField)}"]`,
         )
         if (fieldEl) {
           const fRect = fieldEl.getBoundingClientRect()
-          left = fRect.left + cursor.fieldRelativeX * fRect.width
-          top = fRect.top + cursor.fieldRelativeY * fRect.height
+          // Document-relative position
+          left = fRect.left + localScrollX + cursor.fieldRelativeX * fRect.width
+          top = fRect.top + localScrollY + cursor.fieldRelativeY * fRect.height
         } else {
-          // Field not yet rendered on this client – fall back to container %
-          left = cRect.left + cursor.x * cRect.width
-          top = cRect.top + cursor.y * cRect.height
+          // Field not rendered - use container fallback
+          left = cRect.left + localScrollX + cursor.x * cRect.width
+          top = cRect.top + localScrollY + cursor.y * cRect.height
         }
       } else {
-        left = cRect.left + cursor.x * cRect.width
-        top = cRect.top + cursor.y * cRect.height
+        // Container-relative with scroll compensation
+        // Compute scroll delta to align across devices
+        const scrollDeltaX = localScrollX - senderScrollX
+        const scrollDeltaY = localScrollY - senderScrollY
+
+        left = cRect.left + localScrollX + cursor.x * cRect.width - scrollDeltaX
+        top = cRect.top + localScrollY + cursor.y * cRect.height - scrollDeltaY
       }
 
       setPos({ left, top })
@@ -90,10 +104,21 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
     window.addEventListener('scroll', recompute, { passive: true })
     window.addEventListener('resize', recompute, { passive: true })
 
+    // Visual Viewport listeners (virtual keyboard)
+    const visualViewport = (window as any).visualViewport
+    if (visualViewport) {
+      visualViewport.addEventListener('resize', recompute)
+      visualViewport.addEventListener('scroll', recompute)
+    }
+
     return () => {
       ro.disconnect()
       window.removeEventListener('scroll', recompute)
       window.removeEventListener('resize', recompute)
+      if (visualViewport) {
+        visualViewport.removeEventListener('resize', recompute)
+        visualViewport.removeEventListener('scroll', recompute)
+      }
     }
   }, [cursor, containerRef])
 
@@ -105,7 +130,7 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
     <div
       className="ghost-cursor"
       style={{
-        position: 'fixed',
+        position: 'absolute',
         left: pos.left,
         top: pos.top,
         pointerEvents: 'none',

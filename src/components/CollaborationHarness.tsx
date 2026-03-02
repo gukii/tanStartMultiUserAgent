@@ -541,12 +541,25 @@ export function CollaborationHarness({
       const container = containerRef.current
       if (!container) return
 
-      const cRect = container.getBoundingClientRect()
-      const x = (clientX - cRect.left) / cRect.width
-      const y = (clientY - cRect.top) / cRect.height
+      // Get Visual Viewport offset (virtual keyboard compensation)
+      const visualViewport = (window as any).visualViewport
+      const vvOffsetX = visualViewport ? visualViewport.offsetLeft : 0
+      const vvOffsetY = visualViewport ? visualViewport.offsetTop : 0
 
-      // Try to resolve field-relative coords
-      const target = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+      // Adjust coordinates to layout viewport (compensate for visual viewport shift)
+      const adjustedClientX = clientX - vvOffsetX
+      const adjustedClientY = clientY - vvOffsetY
+
+      const cRect = container.getBoundingClientRect()
+      const x = (adjustedClientX - cRect.left) / cRect.width
+      const y = (adjustedClientY - cRect.top) / cRect.height
+
+      // Capture scroll position for cross-device alignment
+      const scrollX = window.scrollX || window.pageXOffset || 0
+      const scrollY = window.scrollY || window.pageYOffset || 0
+
+      // Try to resolve field-relative coords using adjusted coordinates
+      const target = document.elementFromPoint(adjustedClientX, adjustedClientY) as HTMLElement | null
       if (!target) return
 
       const fieldEl = target.closest<HTMLElement>(
@@ -562,12 +575,20 @@ export function CollaborationHarness({
         activeField = fieldEl.getAttribute('name') || fieldEl.id || undefined
         if (activeField) {
           const fRect = fieldEl.getBoundingClientRect()
-          fieldRelativeX = (clientX - fRect.left) / fRect.width
-          fieldRelativeY = (clientY - fRect.top) / fRect.height
+          fieldRelativeX = (adjustedClientX - fRect.left) / fRect.width
+          fieldRelativeY = (adjustedClientY - fRect.top) / fRect.height
         }
       }
 
-      const position: CursorPosition = { x, y, activeField, fieldRelativeX, fieldRelativeY }
+      const position: CursorPosition = {
+        x,
+        y,
+        activeField,
+        fieldRelativeX,
+        fieldRelativeY,
+        scrollX,
+        scrollY,
+      }
       lastCursorPosition.current = position
       send({ type: 'CURSOR_MOVE', position })
     },

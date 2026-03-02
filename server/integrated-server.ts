@@ -37,6 +37,8 @@ interface CursorPosition {
   activeField?: string
   fieldRelativeX?: number
   fieldRelativeY?: number
+  scrollX?: number
+  scrollY?: number
 }
 
 interface UserInfo {

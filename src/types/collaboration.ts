@@ -15,6 +15,10 @@ export interface CursorPosition {
   fieldRelativeX?: number
   /** 0–1 relative to the field's height */
   fieldRelativeY?: number
+  /** Scroll position from sender (for cross-device alignment) */
+  scrollX?: number
+  /** Scroll position from sender (for cross-device alignment) */
+  scrollY?: number
 }
 
 export interface UserInfo {
