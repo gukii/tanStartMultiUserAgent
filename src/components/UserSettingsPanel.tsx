@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import type { FloatingChatPosition } from './FloatingCursorChat'
 
 const COLOR_PALETTE = [
   '#ef4444', '#f97316', '#eab308', '#22c55e',
@@ -19,8 +20,10 @@ interface UserSettingsPanelProps {
   userName: string
   userColor: string
   cursorMessage: string
+  floatingChatPosition: FloatingChatPosition
   updateUser: (name: string, color: string) => void
   setCursorMessage: (message: string) => void
+  setFloatingChatPosition: (position: FloatingChatPosition) => void
 }
 
 export function UserSettingsPanel({
@@ -29,19 +32,23 @@ export function UserSettingsPanel({
   userName,
   userColor,
   cursorMessage,
+  floatingChatPosition,
   updateUser,
   setCursorMessage,
+  setFloatingChatPosition,
 }: UserSettingsPanelProps) {
   const [name, setName] = useState(userName)
   const [color, setColor] = useState(userColor)
   const [message, setMessage] = useState(cursorMessage)
+  const [position, setPosition] = useState<FloatingChatPosition>(floatingChatPosition)
 
   // Update local state when props change
   useEffect(() => {
     setName(userName)
     setColor(userColor)
     setMessage(cursorMessage)
-  }, [userName, userColor, cursorMessage])
+    setPosition(floatingChatPosition)
+  }, [userName, userColor, cursorMessage, floatingChatPosition])
 
   if (!isOpen) return null
 
@@ -50,6 +57,7 @@ export function UserSettingsPanel({
       updateUser(name.trim(), color)
     }
     setCursorMessage(message)
+    setFloatingChatPosition(position)
     onClose()
   }
 
@@ -112,7 +120,7 @@ export function UserSettingsPanel({
         </div>
 
         {/* Cursor message */}
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Cursor message (optional)
           </label>
@@ -134,6 +142,58 @@ export function UserSettingsPanel({
               Clear message
             </button>
           )}
+        </div>
+
+        {/* Floating chat position */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Chat controls position
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setPosition('top-left')}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                position === 'top-left'
+                  ? 'border-violet-600 bg-violet-50 text-violet-700'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              ↖ Top Left
+            </button>
+            <button
+              onClick={() => setPosition('top-right')}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                position === 'top-right'
+                  ? 'border-violet-600 bg-violet-50 text-violet-700'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              ↗ Top Right
+            </button>
+            <button
+              onClick={() => setPosition('bottom-left')}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                position === 'bottom-left'
+                  ? 'border-violet-600 bg-violet-50 text-violet-700'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              ↙ Bottom Left
+            </button>
+            <button
+              onClick={() => setPosition('bottom-right')}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                position === 'bottom-right'
+                  ? 'border-violet-600 bg-violet-50 text-violet-700'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              ↘ Bottom Right
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Choose where to display the cursor chat and settings button
+          </p>
         </div>
 
         {/* Actions */}

@@ -119,6 +119,7 @@ export type ClientMessage =
   | { type: 'MARK_READY' }
   | { type: 'UNMARK_READY' }
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
+  | { type: 'FORM_SUBMITTED' } // Notify all peers that form was submitted
 
 /** Messages the server sends to clients */
 export type ServerMessage =
@@ -137,6 +138,7 @@ export type ServerMessage =
   | { type: 'DRAFT_REJECTED'; fieldId: string; userId: string }
   | { type: 'READY_STATE_CHANGE'; userId: string; isReady: boolean }
   | { type: 'SUBMIT_MODE_CHANGE'; mode: 'any' | 'consensus' }
+  | { type: 'FORM_SUBMITTED'; userId: string } // Broadcast form submission to all peers
 
 /** Union of all messages (client or server direction) */
 export type WSMessage = ClientMessage | ServerMessage
@@ -172,4 +174,6 @@ export interface CollaborationHarnessProps {
   onFieldUpdate?: (fieldId: string, value: string, userId: string) => void
   /** Called whenever the MutationObserver rebuilds the page schema. */
   onSchemaUpdate?: (schema: FieldSchema[]) => void
+  /** Called when any peer submits the form (in consensus mode). */
+  onFormSubmit?: (submittedByUserId: string) => void
 }

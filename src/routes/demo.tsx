@@ -15,6 +15,7 @@ import { useState, useId, useEffect } from 'react'
 import { CollaborationHarness, useCollaboration } from '../components/CollaborationHarness'
 import { SubmitControl } from '../components/SubmitControl'
 import { UserSettingsPanel } from '../components/UserSettingsPanel'
+import { FloatingCursorChat, type FloatingChatPosition } from '../components/FloatingCursorChat'
 import { getNormalBehavior } from '../lib/normalBehavior.server'
 
 export const Route = createFileRoute('/demo')({
@@ -25,8 +26,7 @@ export const Route = createFileRoute('/demo')({
 // Simple checkout form (plain HTML – no special collaboration code needed)
 // ---------------------------------------------------------------------------
 
-function CheckoutForm() {
-  const [submitted, setSubmitted] = useState(false)
+function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubmitted: (submitted: boolean) => void }) {
   const [mounted, setMounted] = useState(false)
   const firstId = useId()
   const lastId = useId()
@@ -326,7 +326,17 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
 // Settings panel wrapper that uses the collab context
 // ---------------------------------------------------------------------------
 
-function SettingsPanelWrapper({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+function SettingsPanelWrapper({
+  isOpen,
+  onClose,
+  floatingChatPosition,
+  setFloatingChatPosition,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  floatingChatPosition: FloatingChatPosition
+  setFloatingChatPosition: (position: FloatingChatPosition) => void
+}) {
   const { userName, userColor, cursorMessage, updateUser, setCursorMessage } = useCollaboration()
   return (
     <UserSettingsPanel
@@ -335,8 +345,10 @@ function SettingsPanelWrapper({ isOpen, onClose }: { isOpen: boolean; onClose: (
       userName={userName}
       userColor={userColor}
       cursorMessage={cursorMessage}
+      floatingChatPosition={floatingChatPosition}
       updateUser={updateUser}
       setCursorMessage={setCursorMessage}
+      setFloatingChatPosition={setFloatingChatPosition}
     />
   )
 }
@@ -377,44 +389,6 @@ function TouchCursorToggle() {
 }
 
 // ---------------------------------------------------------------------------
-// Quick cursor message input (for mini chat while pointing)
-// ---------------------------------------------------------------------------
-
-function QuickCursorMessageInput() {
-  const { cursorMessage, setCursorMessage } = useCollaboration()
-  const [localMessage, setLocalMessage] = useState(cursorMessage)
-
-  useEffect(() => {
-    setLocalMessage(cursorMessage)
-  }, [cursorMessage])
-
-  function commitMessage() {
-    setCursorMessage(localMessage)
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') {
-      commitMessage()
-      e.currentTarget.blur() // Optional: blur after sending
-    }
-  }
-
-  return (
-    <input
-      type="text"
-      value={localMessage}
-      onChange={(e) => setLocalMessage(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={commitMessage}
-      placeholder="Cursor message (press Enter)"
-      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200 transition"
-      style={{ minWidth: '200px' }}
-      title="Type a message to show next to your cursor, press Enter to send"
-    />
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Demo page
 // ---------------------------------------------------------------------------
 
@@ -422,14 +396,31 @@ function DemoPage() {
   // No partyKitHost needed - auto-detects from window.location.host
   const partyKitHost = import.meta.env.VITE_PARTYKIT_HOST as string | undefined
   const roomId = 'room-demo'
-  const [submitMode, setSubmitMode] = useState<'any' | 'consensus'>('any')
+  const [submitMode, setSubmitMode] = useState<'any' | 'consensus'>('consensus')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+
+  // Load floating chat position from localStorage, default to bottom-right
+  const [floatingChatPosition, setFloatingChatPositionState] = useState<FloatingChatPosition>(() => {
+    if (typeof window === 'undefined') return 'bottom-right'
+    const saved = localStorage.getItem('floatingChatPosition')
+    return (saved as FloatingChatPosition) || 'bottom-right'
+  })
+
+  // Persist position to localStorage
+  const setFloatingChatPosition = (position: FloatingChatPosition) => {
+    setFloatingChatPositionState(position)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('floatingChatPosition', position)
+    }
+  }
 
   return (
     <CollaborationHarness
       roomId={roomId}
       partyKitHost={partyKitHost}
       submitMode={submitMode}
+      onFormSubmit={() => setSubmitted(true)}
     >
       <DemoPageContent
         submitMode={submitMode}
@@ -438,6 +429,10 @@ function DemoPage() {
         setSettingsOpen={setSettingsOpen}
         partyKitHost={partyKitHost}
         roomId={roomId}
+        submitted={submitted}
+        setSubmitted={setSubmitted}
+        floatingChatPosition={floatingChatPosition}
+        setFloatingChatPosition={setFloatingChatPosition}
       />
     </CollaborationHarness>
   )
@@ -450,34 +445,28 @@ function DemoPageContent({
   setSettingsOpen,
   partyKitHost,
   roomId,
+  submitted,
+  setSubmitted,
+  floatingChatPosition,
+  setFloatingChatPosition,
 }: {
   submitMode: 'any' | 'consensus'
   setSubmitMode: (mode: 'any' | 'consensus') => void
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
-  partyKitHost: string
+  partyKitHost: string | undefined
   roomId: string
+  submitted: boolean
+  setSubmitted: (submitted: boolean) => void
+  floatingChatPosition: FloatingChatPosition
+  setFloatingChatPosition: (position: FloatingChatPosition) => void
 }) {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <a href="/" className="text-sm text-violet-600 hover:underline">← Back</a>
-          <div className="flex items-center gap-3">
-            <TouchCursorToggle />
-            <QuickCursorMessageInput />
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
-              title="Change your name, color, and cursor message"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
-              </svg>
-              Settings
-            </button>
-          </div>
+          <TouchCursorToggle />
         </div>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">Checkout form · live demo</h1>
         <p className="mt-1 text-sm text-gray-500">
@@ -520,11 +509,22 @@ function DemoPageContent({
 
       {/* The checkout form wrapped with collaboration */}
       <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-        <CheckoutForm />
+        <CheckoutForm submitted={submitted} setSubmitted={setSubmitted} />
       </div>
 
       {/* User settings panel (inside harness to access context) */}
-      <SettingsPanelWrapper isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsPanelWrapper
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        floatingChatPosition={floatingChatPosition}
+        setFloatingChatPosition={setFloatingChatPosition}
+      />
+
+      {/* Floating cursor chat controls */}
+      <FloatingCursorChat
+        position={floatingChatPosition}
+        onSettingsClick={() => setSettingsOpen(true)}
+      />
 
       <div className="mt-8">
         <AISimulatorPanel partyKitHost={partyKitHost} roomId={roomId} />

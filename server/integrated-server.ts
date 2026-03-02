@@ -254,6 +254,12 @@ class Room {
         this.readyStates.clear()
         this.broadcast({ type: 'SUBMIT_MODE_CHANGE', mode: msg.mode })
         break
+      case 'FORM_SUBMITTED':
+        // Broadcast to all other peers that form was submitted
+        this.broadcast({ type: 'FORM_SUBMITTED', userId })
+        // Clear ready states after submission
+        this.readyStates.clear()
+        break
     }
   }
 

@@ -105,6 +105,7 @@ interface CollaborationContextValue {
   setCursorMessage: (message: string) => void
   touchCursorMode: boolean
   setTouchCursorMode: (enabled: boolean) => void
+  sendFormSubmit: () => void
 }
 
 const CollaborationContext = createContext<CollaborationContextValue | null>(null)
@@ -129,6 +130,7 @@ export function CollaborationHarness({
   submitMode = 'any',
   onFieldUpdate,
   onSchemaUpdate,
+  onFormSubmit,
 }: CollaborationHarnessProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -151,7 +153,7 @@ export function CollaborationHarness({
 
   const [connected, setConnected] = useState(false)
   const [remoteCursors, setRemoteCursors] = useState<Record<string, CursorState>>({})
-  const [, setRemoteFieldValues] = useState<Record<string, FieldValue>>({})
+  const [remoteFieldValues, setRemoteFieldValues] = useState<Record<string, FieldValue>>({})
   const [drafts, setDrafts] = useState<Record<string, DraftSuggestion>>({})
   const [users, setUsers] = useState<Record<string, { userId: string; name: string; color: string }>>({})
   const [currentSubmitMode, setCurrentSubmitMode] = useState<'any' | 'consensus'>(submitMode)
@@ -451,6 +453,12 @@ export function CollaborationHarness({
         case 'SUBMIT_MODE_CHANGE': {
           setCurrentSubmitMode(msg.mode)
           setReadyStates({}) // Clear all ready states
+          break
+        }
+
+        case 'FORM_SUBMITTED': {
+          // Another peer submitted the form - notify parent component
+          onFormSubmit?.(msg.userId)
           break
         }
 
@@ -1174,7 +1182,20 @@ export function CollaborationHarness({
   const unmarkReady = useCallback(() => {
     send({ type: 'UNMARK_READY' })
     setReadyStates((prev) => ({ ...prev, [userId]: false }))
-  }, [send, userId])
+
+    // Re-sync all field values from remote state when unmarking ready
+    // This ensures the user sees the latest values from other peers
+    setTimeout(() => {
+      Object.entries(remoteFieldValues).forEach(([fieldId, fieldValue]) => {
+        // Don't update fields we're currently editing
+        if (fieldId === focusedFieldRef.current) return
+        // Don't update fields locked by others
+        if (fieldLocks[fieldId] && fieldLocks[fieldId] !== userId) return
+
+        applyFieldUpdate(fieldId, fieldValue.value)
+      })
+    }, 50)
+  }, [send, userId, remoteFieldValues, fieldLocks, applyFieldUpdate])
 
   const updateUser = useCallback((newName: string, newColor: string) => {
     setName(newName)
@@ -1204,6 +1225,10 @@ export function CollaborationHarness({
     }
   }, [send])
 
+  const sendFormSubmit = useCallback(() => {
+    send({ type: 'FORM_SUBMITTED' })
+  }, [send])
+
   // ------------------------------------------------------------------
   // Context value
   // ------------------------------------------------------------------
@@ -1223,8 +1248,9 @@ export function CollaborationHarness({
       setCursorMessage,
       touchCursorMode,
       setTouchCursorMode,
+      sendFormSubmit,
     }),
-    [connected, userId, name, color, cursorMessage, currentSubmitMode, users, readyStates, markReady, unmarkReady, updateUser, setCursorMessage, touchCursorMode],
+    [connected, userId, name, color, cursorMessage, currentSubmitMode, users, readyStates, markReady, unmarkReady, updateUser, setCursorMessage, touchCursorMode, sendFormSubmit],
   )
 
   // ------------------------------------------------------------------
@@ -1248,6 +1274,7 @@ export function CollaborationHarness({
       setCursorMessage: () => {},
       touchCursorMode: false,
       setTouchCursorMode: () => {},
+      sendFormSubmit: () => {},
     }),
     [],
   )
