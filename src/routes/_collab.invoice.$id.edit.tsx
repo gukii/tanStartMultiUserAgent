@@ -12,8 +12,8 @@
 
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
-import { CollaborationHarness } from '../../components/CollaborationHarness'
-import { SubmitControl } from '../../components/SubmitControl'
+import { CollaborationHarness } from '../components/CollaborationHarness'
+import { SubmitControl } from '../components/SubmitControl'
 
 export const Route = createFileRoute('/_collab/invoice/$id/edit')({
   component: EditInvoice,
