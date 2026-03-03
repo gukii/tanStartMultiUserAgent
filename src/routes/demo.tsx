@@ -50,11 +50,11 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
 
   if (submitted) {
     return (
-      <div className="rounded-xl border border-green-200 bg-green-50 p-8 text-center">
+      <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center sm:p-8">
         <div className="mb-2 text-4xl">✅</div>
-        <h2 className="text-xl font-semibold text-green-800">Order placed!</h2>
+        <h2 className="text-lg font-semibold text-green-800 sm:text-xl">Order placed!</h2>
         <button
-          className="mt-4 text-sm text-green-700 underline"
+          className="mt-3 text-sm text-green-700 underline sm:mt-4"
           onClick={() => setSubmitted(false)}
         >
           Reset form
@@ -65,13 +65,13 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
 
   return (
     <form
-      className="grid gap-6"
+      className="grid gap-4 sm:gap-6"
       onSubmit={(e) => {
         e.preventDefault()
         setSubmitted(true)
       }}
     >
-      <fieldset className="grid gap-4 sm:grid-cols-2">
+      <fieldset className="grid gap-3 sm:gap-4 sm:grid-cols-2">
         <legend className="col-span-2 mb-1 text-xs font-semibold uppercase tracking-widest text-gray-500">
           Personal details
         </legend>
@@ -116,7 +116,7 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
         </div>
       </fieldset>
 
-      <fieldset className="grid gap-4 sm:grid-cols-3">
+      <fieldset className="grid gap-3 sm:gap-4 sm:grid-cols-3">
         <legend className="col-span-3 mb-1 text-xs font-semibold uppercase tracking-widest text-gray-500">
           Payment
         </legend>
@@ -161,7 +161,7 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
         </div>
       </fieldset>
 
-      <fieldset className="grid gap-4 sm:grid-cols-2">
+      <fieldset className="grid gap-3 sm:gap-4 sm:grid-cols-2">
         <legend className="col-span-2 mb-1 text-xs font-semibold uppercase tracking-widest text-gray-500">
           Shipping
         </legend>
@@ -275,9 +275,9 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
   }
 
   return (
-    <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50 p-5">
-      <h2 className="mb-3 font-semibold text-violet-900">🤖 AI Agent simulator</h2>
-      <p className="mb-4 text-sm text-violet-700">
+    <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50 p-4 sm:p-5">
+      <h2 className="mb-2 text-sm font-semibold text-violet-900 sm:mb-3 sm:text-base">🤖 AI Agent simulator</h2>
+      <p className="mb-3 text-xs text-violet-700 sm:mb-4 sm:text-sm">
         Simulate an AI Agent by injecting draft suggestions into the room. The
         main form will show Accept / Reject bubbles.
       </p>
@@ -357,37 +357,6 @@ function SettingsPanelWrapper({
 // Touch cursor painting toggle button
 // ---------------------------------------------------------------------------
 
-function TouchCursorToggle() {
-  const { touchCursorMode, setTouchCursorMode } = useCollaboration()
-  const [isTouchDevice, setIsTouchDevice] = useState(false)
-
-  useEffect(() => {
-    // Detect if this is a touch device
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
-  }, [])
-
-  // Only show on touch devices
-  if (!isTouchDevice) return null
-
-  return (
-    <button
-      onClick={() => setTouchCursorMode(!touchCursorMode)}
-      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition flex items-center gap-2 ${
-        touchCursorMode
-          ? 'bg-violet-600 text-white border-violet-600'
-          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-      }`}
-      title={touchCursorMode ? 'Touch cursor painting: ON' : 'Touch cursor painting: OFF'}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M9 9.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
-        <path d="M12 3l.5 8.5L21 9l-2 6H3l-1-4z"/>
-      </svg>
-      {touchCursorMode ? 'ON' : 'OFF'}
-    </button>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Demo page
 // ---------------------------------------------------------------------------
@@ -462,21 +431,18 @@ function DemoPageContent({
   setFloatingChatPosition: (position: FloatingChatPosition) => void
 }) {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <a href="/" className="text-sm text-violet-600 hover:underline">← Back</a>
-          <TouchCursorToggle />
-        </div>
-        <h1 className="mt-2 text-2xl font-bold text-gray-900">Checkout form · live demo</h1>
-        <p className="mt-1 text-sm text-gray-500">
+    <div className="mx-auto max-w-2xl px-3 py-6 sm:px-4 sm:py-10">
+      <div className="mb-4 sm:mb-6">
+        <a href="/" className="text-sm text-violet-600 hover:underline">← Back</a>
+        <h1 className="mt-2 text-xl font-bold text-gray-900 sm:text-2xl">Checkout form · live demo</h1>
+        <p className="mt-1 text-xs text-gray-500 sm:text-sm">
           Open this page in two tabs to see ghost cursors and field sync.
           The green dot (top-right of the form) shows connection status.
         </p>
 
         {/* Submit mode toggle */}
-        <div className="mt-4 flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700">Submit mode:</span>
+        <div className="mt-3 flex flex-col gap-2 sm:mt-4 sm:flex-row sm:items-center sm:gap-3">
+          <span className="text-xs font-medium text-gray-700 sm:text-sm">Submit mode:</span>
           <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1">
             <button
               onClick={() => setSubmitMode('any')}
@@ -508,7 +474,7 @@ function DemoPageContent({
       </div>
 
       {/* The checkout form wrapped with collaboration */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-8">
         <CheckoutForm submitted={submitted} setSubmitted={setSubmitted} />
       </div>
 
@@ -526,7 +492,7 @@ function DemoPageContent({
         onSettingsClick={() => setSettingsOpen(true)}
       />
 
-      <div className="mt-8">
+      <div className="mt-6 sm:mt-8">
         <AISimulatorPanel partyKitHost={partyKitHost} roomId={roomId} />
       </div>
     </div>

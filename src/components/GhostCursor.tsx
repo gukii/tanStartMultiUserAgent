@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type RefObject } from 'react'
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type { CursorState } from '../types/collaboration'
 
 interface GhostCursorProps {
@@ -33,6 +33,10 @@ function getInitials(name: string): string {
 export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
   const [pos, setPos] = useState({ left: 0, top: 0 })
   const [isStale, setIsStale] = useState(false)
+
+  // Cache field element to avoid repeated queries for the same field
+  // Using useRef instead of useState to avoid unnecessary re-renders
+  const cachedFieldRef = useRef<{ name: string; element: HTMLElement } | null>(null)
 
   // Detect stale cursors (no movement for 10 seconds)
   useLayoutEffect(() => {
@@ -71,9 +75,27 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
         cursor.fieldRelativeY !== undefined
       ) {
         // Field-relative positioning (best accuracy across devices)
-        const fieldEl = container.querySelector<HTMLElement>(
-          `[name="${CSS.escape(cursor.activeField)}"], [id="${CSS.escape(cursor.activeField)}"]`,
-        )
+        // Use cached field element if it matches, otherwise query
+        let fieldEl: HTMLElement | null = null
+        const cached = cachedFieldRef.current
+        if (cached && cached.name === cursor.activeField) {
+          // Verify cached element is still in DOM
+          if (document.contains(cached.element)) {
+            fieldEl = cached.element
+          } else {
+            cachedFieldRef.current = null
+          }
+        }
+
+        if (!fieldEl) {
+          fieldEl = container.querySelector<HTMLElement>(
+            `[name="${CSS.escape(cursor.activeField)}"], [id="${CSS.escape(cursor.activeField)}"]`,
+          )
+          if (fieldEl) {
+            cachedFieldRef.current = { name: cursor.activeField, element: fieldEl }
+          }
+        }
+
         if (fieldEl) {
           const fRect = fieldEl.getBoundingClientRect()
           // Document-relative position
@@ -86,6 +108,9 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
         }
       } else {
         // Container-relative with scroll compensation
+        // Clear cached field when not in any field
+        cachedFieldRef.current = null
+
         // Compute scroll delta to align across devices
         const scrollDeltaX = localScrollX - senderScrollX
         const scrollDeltaY = localScrollY - senderScrollY
@@ -136,7 +161,7 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
         pointerEvents: 'none',
         zIndex: 9999,
         opacity: isStale ? 0.3 : 1,
-        transition: 'opacity 500ms ease-out',
+        transition: 'opacity 500ms ease-out, left 80ms ease-out, top 80ms ease-out',
       }}
       aria-hidden="true"
     >
