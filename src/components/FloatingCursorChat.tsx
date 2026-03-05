@@ -10,7 +10,7 @@
  */
 
 import { useCollaboration } from './CollaborationHarness'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 export type FloatingChatPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -28,6 +28,8 @@ export function FloatingCursorChat({
   const { cursorMessage, setCursorMessage, touchCursorMode, setTouchCursorMode } = useCollaboration()
   const [localMessage, setLocalMessage] = useState(cursorMessage)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     setLocalMessage(cursorMessage)
@@ -35,6 +37,28 @@ export function FloatingCursorChat({
 
   useEffect(() => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  }, [])
+
+  // Keyboard shortcut: Cmd/Ctrl + K to focus chat input
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      // Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+
+        // Save the currently focused element
+        if (document.activeElement instanceof HTMLElement) {
+          previousFocusRef.current = document.activeElement
+        }
+
+        // Focus the chat input
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      }
+    }
+
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
   }, [])
 
   function commitMessage() {
@@ -45,6 +69,22 @@ export function FloatingCursorChat({
     if (e.key === 'Enter') {
       commitMessage()
       e.currentTarget.blur()
+
+      // Return focus to previous element for fluid chat feeling
+      if (previousFocusRef.current) {
+        previousFocusRef.current.focus()
+        previousFocusRef.current = null
+      }
+    } else if (e.key === 'Escape') {
+      // Cancel without committing
+      setLocalMessage(cursorMessage)
+      e.currentTarget.blur()
+
+      // Return focus to previous element
+      if (previousFocusRef.current) {
+        previousFocusRef.current.focus()
+        previousFocusRef.current = null
+      }
     }
   }
 
@@ -85,14 +125,15 @@ export function FloatingCursorChat({
 
       {/* Cursor message input */}
       <input
+        ref={inputRef}
         type="text"
         value={localMessage}
         onChange={(e) => setLocalMessage(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={commitMessage}
-        placeholder="Cursor chat..."
+        placeholder="Cursor chat... (⌘K)"
         className="w-32 rounded border border-violet-400 bg-white px-2 py-1 text-xs text-gray-900 placeholder:text-gray-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-300 transition sm:w-40"
-        title="Type a message to show next to your cursor, press Enter to send"
+        title="Type a message to show next to your cursor. Shortcut: Cmd/Ctrl + K. Press Enter to send, Esc to cancel."
       />
 
       {/* Settings gear button */}

@@ -32,12 +32,20 @@ function HomePage() {
         coaching layer — with zero changes to the wrapped component.
       </p>
 
-      <Link
-        to="/demo"
-        className="mb-12 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-3 font-semibold text-white shadow hover:bg-violet-700 transition-colors"
-      >
-        Open live demo →
-      </Link>
+      <div className="mb-12 flex flex-wrap gap-3">
+        <Link
+          to="/demo"
+          className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-3 font-semibold text-white shadow hover:bg-violet-700 transition-colors"
+        >
+          Open live demo →
+        </Link>
+        <Link
+          to="/demo-telemetry"
+          className="inline-flex items-center gap-2 rounded-lg border-2 border-emerald-600 bg-emerald-50 px-5 py-3 font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100 transition-colors"
+        >
+          📊 Telemetry demo →
+        </Link>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Feature

@@ -22,6 +22,7 @@ build/
 *.db-shm
 *.db-wal
 local.db
+data/
 
 # Logs
 logs/

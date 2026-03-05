@@ -14,6 +14,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import express from 'express'
 import { createServer } from 'http'
 import { createProxyMiddleware } from 'http-proxy-middleware'
+import { telemetryHandler } from './telemetry-handler'
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -103,6 +104,7 @@ type IncomingMessage =
   | { type: 'MARK_READY' }
   | { type: 'UNMARK_READY' }
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
+  | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number }
 
 // ---------------------------------------------------------------------------
 // Room Management (same as standalone WebSocket server)
@@ -262,6 +264,37 @@ class Room {
         // Clear ready states after submission
         this.readyStates.clear()
         break
+
+      case 'TELEMETRY_BATCH': {
+        // Non-blocking telemetry ingestion (async via setImmediate)
+        setImmediate(async () => {
+          try {
+            await telemetryHandler.ingestBatch(
+              this.roomId,
+              userId,
+              msg.events,
+              msg.sequenceId
+            )
+
+            // Send acknowledgment
+            this.send(ws, {
+              type: 'TELEMETRY_ACK',
+              sequenceId: msg.sequenceId,
+              status: 'success',
+            })
+          } catch (error: any) {
+            console.error('[Telemetry] Ingest error:', error)
+            // Don't propagate error to WebSocket handler
+            this.send(ws, {
+              type: 'TELEMETRY_ACK',
+              sequenceId: msg.sequenceId,
+              status: 'error',
+              error: error.message,
+            })
+          }
+        })
+        break
+      }
     }
   }
 

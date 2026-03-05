@@ -1,25 +1,25 @@
 /**
- * /demo – Checkout form wrapped with CollaborationHarness
+ * /demo-telemetry – Checkout form with TELEMETRY ENABLED
  *
- * This route demonstrates all harness features:
- *   • Open in two browser tabs to see each other's ghost cursors
- *   • Type in any field to see it sync across tabs
- *   • Use the "Simulate AI Agent" panel to inject DRAFT_FIELD messages
- *     and experience the Accept / Reject suggestion flow
- *   • Click "Load AI hints" to fetch historical guardrails via a
- *     TanStack Server Function and pre-populate the AI's context
+ * This route demonstrates the telemetry system:
+ *   • Same features as /demo but with comprehensive event tracking
+ *   • PII mode: 'capture' (stores raw values for testing)
+ *   • Captures: field interactions, keystrokes, validation errors, AI drafts
+ *   • Check database: `node scripts/verify-telemetry-db.js`
+ *   • Query data: `sqlite3 data/telemetry.db`
  */
 
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useId, useEffect } from 'react'
-import { CollaborationHarness, useCollaboration } from '../components/CollaborationHarness'
+import { CollaborationHarnessWithTelemetry } from '../components/CollaborationHarnessWithTelemetry'
+import { useCollaboration } from '../components/CollaborationHarness'
 import { SubmitControl } from '../components/SubmitControl'
 import { UserSettingsPanel } from '../components/UserSettingsPanel'
 import { FloatingCursorChat, type FloatingChatPosition } from '../components/FloatingCursorChat'
 import { getNormalBehavior } from '../lib/normalBehavior.server'
 
-export const Route = createFileRoute('/demo')({
-  component: DemoPage,
+export const Route = createFileRoute('/demo-telemetry')({
+  component: DemoTelemetryPage,
 })
 
 // ---------------------------------------------------------------------------
@@ -91,6 +91,9 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
       <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center sm:p-8">
         <div className="mb-2 text-4xl">✅</div>
         <h2 className="text-lg font-semibold text-green-800 sm:text-xl">Order placed!</h2>
+        <p className="mt-2 text-sm text-green-700">
+          📊 Telemetry data captured. Check: <code className="rounded bg-green-100 px-1 py-0.5 text-xs">node scripts/verify-telemetry-db.js</code>
+        </p>
         <button
           className="mt-3 text-sm text-green-700 underline sm:mt-4"
           onClick={resetForm}
@@ -123,6 +126,7 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
             name="firstName"
             type="text"
             placeholder="Alice"
+            required
             data-ai-intent="Customer first name"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -136,6 +140,7 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
             name="lastName"
             type="text"
             placeholder="Smith"
+            required
             data-ai-intent="Customer last name"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -149,6 +154,7 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
             name="email"
             type="email"
             placeholder="alice@example.com"
+            required
             data-ai-intent="Customer email address"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -168,6 +174,8 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
             name="cardNumber"
             type="text"
             placeholder="4242 4242 4242 4242"
+            pattern="[0-9\s]{13,19}"
+            required
             data-ai-intent="16-digit credit card number"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -181,6 +189,8 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
             name="expiry"
             type="text"
             placeholder="MM/YY"
+            pattern="(0[1-9]|1[0-2])\/([0-9]{2})"
+            required
             data-ai-intent="Card expiry date in MM/YY format"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -194,6 +204,8 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
             name="cvv"
             type="text"
             placeholder="123"
+            pattern="[0-9]{3,4}"
+            required
             data-ai-intent="3 or 4 digit card security code"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -213,6 +225,7 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
             name="address"
             type="text"
             placeholder="123 Main St"
+            required
             data-ai-intent="Street address including house number"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -226,6 +239,7 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
             name="city"
             type="text"
             placeholder="San Francisco"
+            required
             data-ai-intent="City name"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -237,6 +251,7 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
           <select
             id={countryId}
             name="country"
+            required
             data-ai-intent="Country selection"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           >
@@ -283,7 +298,7 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
 
   async function loadHints() {
     try {
-      const data = await getNormalBehavior({ data: '/demo' })
+      const data = await getNormalBehavior({ data: '/demo-telemetry' })
       setHints(JSON.stringify(data.fields, null, 2))
       setStatus('Hints loaded ✓')
     } catch (err) {
@@ -310,7 +325,7 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
       setTimeout(() => ws.close(), 300)
       setStatus(`Draft sent for "${fieldId}" ✓`)
     }
-    ws.onerror = () => setStatus('WebSocket error – is partykit dev running?')
+    ws.onerror = () => setStatus('WebSocket error – is server running?')
   }
 
   return (
@@ -318,7 +333,7 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
       <h2 className="mb-2 text-sm font-semibold text-violet-900 sm:mb-3 sm:text-base">🤖 AI Agent simulator</h2>
       <p className="mb-3 text-xs text-violet-700 sm:mb-4 sm:text-sm">
         Simulate an AI Agent by injecting draft suggestions into the room. The
-        main form will show Accept / Reject bubbles.
+        main form will show Accept / Reject bubbles. Telemetry tracks AI suggestion acceptance rates.
       </p>
 
       <div className="mb-3 flex flex-wrap gap-2">
@@ -378,6 +393,50 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Telemetry info panel
+// ---------------------------------------------------------------------------
+
+function TelemetryInfoPanel() {
+  return (
+    <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50 p-4 sm:p-5">
+      <h2 className="mb-2 text-sm font-semibold text-emerald-900 sm:mb-3 sm:text-base">📊 Telemetry Active</h2>
+      <p className="mb-3 text-xs text-emerald-700 sm:text-sm">
+        This page captures comprehensive interaction data for analysis.
+      </p>
+
+      <div className="space-y-2 text-xs text-emerald-800">
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5">✓</span>
+          <span><strong>Events tracked:</strong> Field focus/blur, keystrokes, validation errors, AI drafts</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5">✓</span>
+          <span><strong>PII mode:</strong> <code className="rounded bg-emerald-100 px-1 py-0.5">capture</code> (raw values stored for testing)</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5">✓</span>
+          <span><strong>Storage:</strong> SQLite database at <code className="rounded bg-emerald-100 px-1 py-0.5">./data/telemetry.db</code></span>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-lg bg-white p-3 border border-emerald-200">
+        <div className="mb-2 text-xs font-semibold text-emerald-900">Verify Data Capture</div>
+        <code className="block text-xs text-gray-700 bg-gray-50 p-2 rounded overflow-x-auto">
+          node scripts/verify-telemetry-db.js
+        </code>
+      </div>
+
+      <div className="mt-3 rounded-lg bg-white p-3 border border-emerald-200">
+        <div className="mb-2 text-xs font-semibold text-emerald-900">Query Events</div>
+        <code className="block text-xs text-gray-700 bg-gray-50 p-2 rounded overflow-x-auto">
+          sqlite3 data/telemetry.db "SELECT event_type, COUNT(*) FROM telemetry_interactions GROUP BY event_type;"
+        </code>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Settings panel wrapper that uses the collab context
 // ---------------------------------------------------------------------------
 
@@ -409,17 +468,12 @@ function SettingsPanelWrapper({
 }
 
 // ---------------------------------------------------------------------------
-// Touch cursor painting toggle button
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Demo page
 // ---------------------------------------------------------------------------
 
-function DemoPage() {
-  // No partyKitHost needed - auto-detects from window.location.host
+function DemoTelemetryPage() {
   const partyKitHost = import.meta.env.VITE_PARTYKIT_HOST as string | undefined
-  const roomId = 'room-demo'
+  const roomId = 'room-demo-telemetry'
   const [submitMode, setSubmitMode] = useState<'any' | 'consensus'>('consensus')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -440,11 +494,18 @@ function DemoPage() {
   }
 
   return (
-    <CollaborationHarness
+    <CollaborationHarnessWithTelemetry
       roomId={roomId}
       partyKitHost={partyKitHost}
       submitMode={submitMode}
       onFormSubmit={() => setSubmitted(true)}
+      telemetryConfig={{
+        enabled: true,
+        piiMode: 'capture', // Store raw values for testing
+        sampleRate: 1.0,
+        captureKeystrokes: true,
+        captureCursors: false,
+      }}
     >
       <DemoPageContent
         submitMode={submitMode}
@@ -458,7 +519,7 @@ function DemoPage() {
         floatingChatPosition={floatingChatPosition}
         setFloatingChatPosition={setFloatingChatPosition}
       />
-    </CollaborationHarness>
+    </CollaborationHarnessWithTelemetry>
   )
 }
 
@@ -489,10 +550,12 @@ function DemoPageContent({
     <div className="mx-auto max-w-2xl px-3 py-6 sm:px-4 sm:py-10">
       <div className="mb-4 sm:mb-6">
         <a href="/" className="text-sm text-violet-600 hover:underline">← Back</a>
-        <h1 className="mt-2 text-xl font-bold text-gray-900 sm:text-2xl">Checkout form · live demo</h1>
+        <h1 className="mt-2 text-xl font-bold text-gray-900 sm:text-2xl">
+          Checkout form · telemetry demo
+        </h1>
         <p className="mt-1 text-xs text-gray-500 sm:text-sm">
-          Open this page in two tabs to see ghost cursors and field sync.
-          The green dot (top-right of the form) shows connection status.
+          Same as /demo but with comprehensive telemetry tracking enabled.
+          All interactions are captured for analysis.
         </p>
 
         {/* Submit mode toggle */}
@@ -528,7 +591,7 @@ function DemoPageContent({
         </div>
       </div>
 
-      {/* The checkout form wrapped with collaboration */}
+      {/* The checkout form wrapped with collaboration + telemetry */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-8">
         <CheckoutForm submitted={submitted} setSubmitted={setSubmitted} />
       </div>
@@ -547,7 +610,8 @@ function DemoPageContent({
         onSettingsClick={() => setSettingsOpen(true)}
       />
 
-      <div className="mt-6 sm:mt-8">
+      <div className="mt-6 space-y-6 sm:mt-8">
+        <TelemetryInfoPanel />
         <AISimulatorPanel partyKitHost={partyKitHost} roomId={roomId} />
       </div>
     </div>
