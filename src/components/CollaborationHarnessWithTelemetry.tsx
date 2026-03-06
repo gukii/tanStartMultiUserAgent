@@ -84,15 +84,21 @@ export function CollaborationHarnessWithTelemetry({
   // This is a workaround since we're not modifying the core harness.
   // In production, you might want to expose the socket via context or ref.
   useEffect(() => {
+    console.log('[Telemetry] Looking for WebSocket...');
+
     // Try to find the WebSocket instance
     // This is fragile but works for the wrapper pattern
     const checkForSocket = setInterval(() => {
       // Access the WebSocket from the global window (if available)
       // Or use a more sophisticated approach like exposing via context
       const ws = (window as any).__collabSocket__;
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        socketRef.current = ws;
-        clearInterval(checkForSocket);
+      if (ws) {
+        console.log('[Telemetry] Found WebSocket, readyState:', ws.readyState);
+        if (ws.readyState === WebSocket.OPEN) {
+          socketRef.current = ws;
+          console.log('[Telemetry] WebSocket connected and assigned to socketRef');
+          clearInterval(checkForSocket);
+        }
       }
     }, 100);
 

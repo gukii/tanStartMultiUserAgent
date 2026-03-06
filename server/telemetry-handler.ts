@@ -91,6 +91,8 @@ export class TelemetryHandler {
     events: TelemetryEvent[],
     sequenceId: number
   ): Promise<void> {
+    console.log(`[Telemetry] ingestBatch called: roomId=${roomId}, userId=${userId}, events=${events.length}, sequence=${sequenceId}`);
+
     // Check for duplicate sequence
     const key = `${roomId}:${userId}`;
     if (this.processedSequences.get(key)?.has(sequenceId)) {
@@ -100,6 +102,7 @@ export class TelemetryHandler {
 
     // Add to queue
     this.queue.push({ roomId, userId, events, sequenceId });
+    console.log(`[Telemetry] Added to queue. Queue size: ${this.queue.length}`);
 
     // Mark sequence as processed
     if (!this.processedSequences.has(key)) {
@@ -109,6 +112,7 @@ export class TelemetryHandler {
 
     // Flush if queue is full
     if (this.queue.length >= FLUSH_THRESHOLD) {
+      console.log(`[Telemetry] Queue full (${this.queue.length}), flushing...`);
       await this.flush();
     }
   }

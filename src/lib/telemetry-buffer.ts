@@ -116,6 +116,8 @@ export class TelemetryBuffer {
     const events = this.buffer.splice(0);
     const batchSequenceId = this.sequenceId;
 
+    console.log(`[Telemetry] Flushing ${events.length} events (sequence ${batchSequenceId})`);
+
     try {
       this.onFlush?.(events, batchSequenceId);
     } catch (error) {

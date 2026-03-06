@@ -266,6 +266,8 @@ class Room {
         break
 
       case 'TELEMETRY_BATCH': {
+        console.log(`[Server] Received TELEMETRY_BATCH from ${userId}: ${msg.events.length} events, sequence ${msg.sequenceId}`);
+
         // Non-blocking telemetry ingestion (async via setImmediate)
         setImmediate(async () => {
           try {
@@ -275,6 +277,8 @@ class Room {
               msg.events,
               msg.sequenceId
             )
+
+            console.log(`[Server] Telemetry batch processed successfully, sending ACK`);
 
             // Send acknowledgment
             this.send(ws, {

@@ -499,6 +499,11 @@ export function CollaborationHarness({
     })
     socketRef.current = socket
 
+    // Expose socket globally for telemetry wrapper
+    if (typeof window !== 'undefined') {
+      (window as any).__collabSocket__ = socket
+    }
+
     socket.addEventListener('open', () => {
       setConnected(true)
       send({ type: 'IDENTIFY', userId, name, color })
@@ -509,6 +514,9 @@ export function CollaborationHarness({
     return () => {
       socket.close()
       socketRef.current = null
+      if (typeof window !== 'undefined') {
+        (window as any).__collabSocket__ = null
+      }
       setConnected(false)
     }
   }, [disabled, resolvedRoomId, userId, name, color, partyKitHost, send, handleMessage])
