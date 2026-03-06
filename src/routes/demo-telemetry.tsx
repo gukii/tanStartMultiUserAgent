@@ -10,7 +10,7 @@
  */
 
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useId, useEffect } from 'react'
+import { useState, useId, useEffect, useRef, useCallback } from 'react'
 import { CollaborationHarnessWithTelemetry } from '../components/CollaborationHarnessWithTelemetry'
 import { useCollaboration } from '../components/CollaborationHarness'
 import { SubmitControl } from '../components/SubmitControl'
@@ -26,7 +26,15 @@ export const Route = createFileRoute('/demo-telemetry')({
 // Simple checkout form (plain HTML – no special collaboration code needed)
 // ---------------------------------------------------------------------------
 
-function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubmitted: (submitted: boolean) => void }) {
+function CheckoutForm({
+  submitted,
+  setSubmitted,
+  onReset
+}: {
+  submitted: boolean
+  setSubmitted: (submitted: boolean) => void
+  onReset: () => void
+}) {
   const [mounted, setMounted] = useState(false)
   const [formKey, setFormKey] = useState(0)
   const firstId = useId()
@@ -75,8 +83,8 @@ function CheckoutForm({ submitted, setSubmitted }: { submitted: boolean; setSubm
       keysToRemove.forEach((key) => localStorage.removeItem(key))
     }
 
-    // Reset submitted state
-    setSubmitted(false)
+    // Reset submitted state and mark that user has manually reset
+    onReset()
 
     // Force re-render by changing key
     setFormKey((k) => k + 1)
@@ -477,6 +485,13 @@ function DemoTelemetryPage() {
   const [submitMode, setSubmitMode] = useState<'any' | 'consensus'>('consensus')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const hasResetRef = useRef(false)
+
+  // Handler to mark that user has manually reset the form
+  const handleReset = useCallback(() => {
+    hasResetRef.current = true
+    setSubmitted(false)
+  }, [])
 
   // Load floating chat position from localStorage, default to bottom-left
   const [floatingChatPosition, setFloatingChatPositionState] = useState<FloatingChatPosition>(() => {
@@ -498,7 +513,12 @@ function DemoTelemetryPage() {
       roomId={roomId}
       partyKitHost={partyKitHost}
       submitMode={submitMode}
-      onFormSubmit={() => setSubmitted(true)}
+      onFormSubmit={() => {
+        // Don't set submitted if user has manually reset the form
+        if (!hasResetRef.current) {
+          setSubmitted(true)
+        }
+      }}
       telemetryConfig={{
         enabled: true,
         piiMode: 'capture', // Store raw values for testing
@@ -516,6 +536,7 @@ function DemoTelemetryPage() {
         roomId={roomId}
         submitted={submitted}
         setSubmitted={setSubmitted}
+        onReset={handleReset}
         floatingChatPosition={floatingChatPosition}
         setFloatingChatPosition={setFloatingChatPosition}
       />
@@ -532,6 +553,7 @@ function DemoPageContent({
   roomId,
   submitted,
   setSubmitted,
+  onReset,
   floatingChatPosition,
   setFloatingChatPosition,
 }: {
@@ -543,6 +565,7 @@ function DemoPageContent({
   roomId: string
   submitted: boolean
   setSubmitted: (submitted: boolean) => void
+  onReset: () => void
   floatingChatPosition: FloatingChatPosition
   setFloatingChatPosition: (position: FloatingChatPosition) => void
 }) {
@@ -593,7 +616,7 @@ function DemoPageContent({
 
       {/* The checkout form wrapped with collaboration + telemetry */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-8">
-        <CheckoutForm submitted={submitted} setSubmitted={setSubmitted} />
+        <CheckoutForm submitted={submitted} setSubmitted={setSubmitted} onReset={onReset} />
       </div>
 
       {/* User settings panel (inside harness to access context) */}
