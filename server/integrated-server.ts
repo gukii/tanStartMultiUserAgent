@@ -423,23 +423,8 @@ const wss = new WebSocketServer({
   noServer: true, // Handle upgrades manually
 })
 
-// Handle WebSocket upgrade requests
-server.on('upgrade', (request, socket, head) => {
-  const pathname = request.url?.split('?')[0]
-  console.log(`[WebSocket] Upgrade request: ${request.url}`)
-  console.log(`[WebSocket] Pathname: ${pathname}`)
-
-  // Only handle WebSocket upgrades for /parties/main/:roomId paths
-  if (pathname && pathname.match(/^\/parties\/main\/.+$/)) {
-    console.log(`[WebSocket] ✓ Accepting upgrade for ${pathname}`)
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request)
-    })
-  } else {
-    console.log(`[WebSocket] ✗ Rejecting upgrade for ${pathname} (doesn't match pattern)`)
-    socket.destroy()
-  }
-})
+// Store proxy reference for WebSocket forwarding
+let proxyMiddleware: any = null
 
 wss.on('connection', (ws, req) => {
   const match = req.url?.match(/^\/parties\/main\/([^?]+)/)
@@ -489,11 +474,10 @@ async function start() {
     console.log(`[Startup] Starting TanStack Start server...`)
     await startTanStackServer()
 
-    app.use(
-      createProxyMiddleware({
+    const proxy = createProxyMiddleware({
         target: `http://127.0.0.1:${TANSTACK_PORT}`,
         changeOrigin: true,
-        ws: false,
+        ws: true, // Enable WebSocket proxying for Vite HMR
         filter: (pathname) => pathname !== '/health',
         onError: (err, req, res) => {
           console.error('[Proxy] Error:', err.message)
@@ -506,8 +490,34 @@ async function start() {
             console.log(`[Proxy] ${req.method} ${req.url} -> TanStack:${TANSTACK_PORT}`)
           }
         },
-      }),
-    )
+      })
+
+    // Store proxy reference for WebSocket forwarding
+    proxyMiddleware = proxy
+
+    app.use(proxy)
+
+    // Handle WebSocket upgrade requests AFTER proxy is configured
+    server.on('upgrade', (request, socket, head) => {
+      const pathname = request.url?.split('?')[0]
+
+      // Only handle WebSocket upgrades for /parties/main/:roomId paths
+      if (pathname && pathname.match(/^\/parties\/main\/.+$/)) {
+        console.log(`[WebSocket] ✓ Collaboration WebSocket: ${pathname}`)
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit('connection', ws, request)
+        })
+      } else {
+        // For other WebSocket connections (e.g., Vite HMR), forward to proxy
+        console.log(`[WebSocket] → Forwarding to proxy (Vite HMR): ${pathname}`)
+        if (proxyMiddleware && proxyMiddleware.upgrade) {
+          proxyMiddleware.upgrade(request, socket, head)
+        } else {
+          console.error('[WebSocket] Proxy upgrade method not available')
+          socket.destroy()
+        }
+      }
+    })
 
     // Start the integrated server
     server.listen(PORT, '0.0.0.0', () => {

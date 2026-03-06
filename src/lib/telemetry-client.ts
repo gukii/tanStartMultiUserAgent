@@ -1,4 +1,5 @@
-import { useRef, useEffect, useCallback, RefObject } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
+import type { RefObject } from 'react';
 import { TelemetryBuffer } from './telemetry-buffer';
 import type {
   TelemetryEvent,
