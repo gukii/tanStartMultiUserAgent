@@ -45,6 +45,12 @@ function HomePage() {
         >
           📊 Telemetry demo →
         </Link>
+        <Link
+          to="/analytics"
+          className="inline-flex items-center gap-2 rounded-lg border-2 border-blue-600 bg-blue-50 px-5 py-3 font-semibold text-blue-700 shadow-sm hover:bg-blue-100 transition-colors"
+        >
+          📈 Analytics Dashboard →
+        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

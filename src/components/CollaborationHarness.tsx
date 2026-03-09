@@ -88,7 +88,7 @@ function ValidationErrorNotification({
     // Create a container for the portal
     const container = document.createElement('div')
     container.setAttribute('data-validation-errors', 'true')
-    container.style.marginTop = '0.75rem'
+    container.style.marginTop = '0.5rem'
     container.style.width = '100%'
 
     // Find the best place to insert: after the submit button or its wrapper
@@ -134,21 +134,21 @@ function ValidationErrorNotification({
         backgroundColor: '#fef2f2',
         border: '2px solid #f87171',
         borderRadius: '0.5rem',
-        padding: '0.75rem',
+        padding: '0.625rem',
         boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
       }}
       role="alert"
       aria-live="polite"
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-        <div style={{ fontSize: '1rem', lineHeight: 1 }}>⚠️</div>
+        <div style={{ fontSize: '0.875rem', lineHeight: 1 }}>⚠️</div>
         <div style={{ flex: 1 }}>
-          <h3 style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#991b1b', marginBottom: '0.375rem' }}>
+          <h3 style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#991b1b', marginBottom: '0.25rem' }}>
             Please fix the following errors:
           </h3>
-          <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.8125rem', color: '#7f1d1d', lineHeight: 1.4 }}>
+          <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.8125rem', color: '#7f1d1d', lineHeight: 1.3 }}>
             {errors.map((error) => (
-              <li key={error.fieldId} style={{ marginBottom: '0.125rem' }}>
+              <li key={error.fieldId} style={{ marginBottom: '0.0625rem' }}>
                 <strong>{error.fieldLabel}:</strong> {error.message}
               </li>
             ))}
@@ -161,7 +161,7 @@ function ValidationErrorNotification({
             border: 'none',
             color: '#991b1b',
             cursor: 'pointer',
-            fontSize: '1.125rem',
+            fontSize: '1rem',
             lineHeight: 1,
             padding: 0,
             flexShrink: 0,
