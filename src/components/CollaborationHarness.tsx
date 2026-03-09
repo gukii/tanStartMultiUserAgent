@@ -27,6 +27,7 @@ import {
   useState,
   type RefObject,
 } from 'react'
+import { createPortal } from 'react-dom'
 // import PartySocket from 'partysocket' // Removed: using native WebSocket for self-hosted server
 import { nanoid } from 'nanoid'
 import { useMultiplayerMap } from '../hooks/useMultiplayerMap'
@@ -64,6 +65,115 @@ function randomName() {
   const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)]
   const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)]
   return `${adj} ${noun}`
+}
+
+/**
+ * Validation error notification component
+ * Positions itself below the submit button using React Portal
+ */
+function ValidationErrorNotification({
+  errors,
+  submitButton,
+  onDismiss,
+}: {
+  errors: Array<{ fieldId: string; fieldLabel: string; message: string }>
+  submitButton: HTMLElement
+  onDismiss: () => void
+}) {
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!submitButton) return
+
+    // Create a container for the portal
+    const container = document.createElement('div')
+    container.setAttribute('data-validation-errors', 'true')
+    container.style.marginTop = '0.75rem'
+    container.style.width = '100%'
+
+    // Find the best place to insert: after the submit button or its wrapper
+    // First, check if the button is inside a SubmitControl wrapper (div with minHeight)
+    let insertAfter = submitButton
+    const parent = submitButton.parentElement
+
+    if (parent) {
+      // If parent has minHeight style, it's likely the SubmitControl wrapper
+      const parentStyle = window.getComputedStyle(parent)
+      if (parentStyle.minHeight && parent.querySelector('button[type="submit"]')) {
+        insertAfter = parent
+      }
+    }
+
+    // Insert the container after the submit button (or its wrapper)
+    const insertParent = insertAfter.parentElement
+    if (insertParent) {
+      const nextSibling = insertAfter.nextSibling
+      if (nextSibling) {
+        insertParent.insertBefore(container, nextSibling)
+      } else {
+        insertParent.appendChild(container)
+      }
+    }
+
+    setPortalContainer(container)
+
+    // Cleanup: remove container when unmounting
+    return () => {
+      if (container && container.parentElement) {
+        container.parentElement.removeChild(container)
+      }
+      setPortalContainer(null)
+    }
+  }, [submitButton])
+
+  if (!portalContainer) return null
+
+  return createPortal(
+    <div
+      style={{
+        backgroundColor: '#fef2f2',
+        border: '2px solid #f87171',
+        borderRadius: '0.5rem',
+        padding: '0.75rem',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+      }}
+      role="alert"
+      aria-live="polite"
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+        <div style={{ fontSize: '1rem', lineHeight: 1 }}>⚠️</div>
+        <div style={{ flex: 1 }}>
+          <h3 style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#991b1b', marginBottom: '0.375rem' }}>
+            Please fix the following errors:
+          </h3>
+          <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.8125rem', color: '#7f1d1d', lineHeight: 1.4 }}>
+            {errors.map((error) => (
+              <li key={error.fieldId} style={{ marginBottom: '0.125rem' }}>
+                <strong>{error.fieldLabel}:</strong> {error.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <button
+          onClick={onDismiss}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#991b1b',
+            cursor: 'pointer',
+            fontSize: '1.125rem',
+            lineHeight: 1,
+            padding: 0,
+            flexShrink: 0,
+          }}
+          aria-label="Dismiss errors"
+        >
+          ×
+        </button>
+      </div>
+    </div>,
+    portalContainer
+  )
 }
 
 /**
@@ -106,6 +216,7 @@ interface CollaborationContextValue {
   touchCursorMode: boolean
   setTouchCursorMode: (enabled: boolean) => void
   sendFormSubmit: () => void
+  clearForm: () => void
 }
 
 const CollaborationContext = createContext<CollaborationContextValue | null>(null)
@@ -131,6 +242,8 @@ export function CollaborationHarness({
   onFieldUpdate,
   onSchemaUpdate,
   onFormSubmit,
+  onFormClear,
+  onSubmitModeChange,
 }: CollaborationHarnessProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -166,6 +279,7 @@ export function CollaborationHarness({
   const [touchCursorPosition, setTouchCursorPosition] = useState<{ x: number; y: number } | null>(null) // Visual cursor position for touch mode
   const fieldActivityTimestamps = useRef<Record<string, number>>({}) // Track last activity time per field per user (fieldId -> timestamp)
   const [evictionBlocked, setEvictionBlocked] = useState<string | null>(null) // Track which field eviction was blocked for (show visual feedback)
+  const [validationErrors, setValidationErrors] = useState<Array<{ fieldId: string; fieldLabel: string; message: string }>>([]) // Validation errors
 
   // ------------------------------------------------------------------
   // Live semantic map via MutationObserver
@@ -453,12 +567,50 @@ export function CollaborationHarness({
         case 'SUBMIT_MODE_CHANGE': {
           setCurrentSubmitMode(msg.mode)
           setReadyStates({}) // Clear all ready states
+          // Notify parent component
+          onSubmitModeChange?.(msg.mode)
           break
         }
 
         case 'FORM_SUBMITTED': {
           // Another peer submitted the form - notify parent component
           onFormSubmit?.(msg.userId)
+          break
+        }
+
+        case 'FORM_CLEARED': {
+          // Another peer cleared the form - clear everything for all peers
+          console.log('[CollaborationHarness] FORM_CLEARED received - resetting all state')
+
+          // Clear remote state
+          setRemoteFieldValues({})
+          setDrafts({})
+          setReadyStates({})
+
+          // Clear all DOM fields
+          const formElements = document.querySelectorAll('form input, form textarea, form select')
+          formElements.forEach((element) => {
+            if (element instanceof HTMLInputElement) {
+              if (element.type === 'checkbox' || element.type === 'radio') {
+                element.checked = false
+              } else {
+                element.value = ''
+              }
+              element.dispatchEvent(new Event('input', { bubbles: true }))
+              element.dispatchEvent(new Event('change', { bubbles: true }))
+            } else if (element instanceof HTMLTextAreaElement) {
+              element.value = ''
+              element.dispatchEvent(new Event('input', { bubbles: true }))
+              element.dispatchEvent(new Event('change', { bubbles: true }))
+            } else if (element instanceof HTMLSelectElement) {
+              element.selectedIndex = 0
+              element.dispatchEvent(new Event('change', { bubbles: true }))
+            }
+          })
+
+          // Notify parent component
+          onFormClear?.()
+
           break
         }
 
@@ -712,6 +864,107 @@ export function CollaborationHarness({
       container.removeEventListener('touchcancel', onTouchEnd)
     }
   }, [disabled, connected, broadcastCursor, touchCursorMode])
+
+  // ------------------------------------------------------------------
+  // Validation error tracking
+  // ------------------------------------------------------------------
+  const [submitButtonElement, setSubmitButtonElement] = useState<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || disabled) return
+
+    const errors = new Map<string, { fieldId: string; fieldLabel: string; message: string }>()
+    let foundSubmitButton: HTMLElement | null = null
+    let pendingUpdate: ReturnType<typeof setTimeout> | null = null
+
+    function onInvalid(e: Event) {
+      // Prevent browser's default validation tooltip
+      e.preventDefault()
+
+      const target = e.target
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return
+
+      const fieldId = target.id || target.name
+      if (!fieldId) return
+
+      // Get field label
+      let fieldLabel = fieldId
+      const label = container.querySelector(`label[for="${fieldId}"]`)
+      if (label) {
+        fieldLabel = label.textContent?.replace('*', '').trim() || fieldId
+      }
+
+      errors.set(fieldId, {
+        fieldId,
+        fieldLabel,
+        message: target.validationMessage,
+      })
+
+      // Find the submit button for positioning (only once)
+      if (!foundSubmitButton) {
+        const form = (target as HTMLElement).closest('form')
+        if (form) {
+          // Look for submit button - try multiple selectors
+          foundSubmitButton = form.querySelector('button[type="submit"]') as HTMLElement
+            || form.querySelector('button:not([type])') as HTMLElement
+            || form.querySelector('input[type="submit"]') as HTMLElement
+        }
+      }
+
+      // Clear any pending update
+      if (pendingUpdate) {
+        clearTimeout(pendingUpdate)
+      }
+
+      // Update state after a brief delay to collect all errors
+      pendingUpdate = setTimeout(() => {
+        setValidationErrors(Array.from(errors.values()))
+        if (foundSubmitButton) {
+          setSubmitButtonElement(foundSubmitButton)
+        }
+        pendingUpdate = null
+      }, 50)
+    }
+
+    function onSubmit(e: Event) {
+      // Clear errors on successful submit
+      if (!(e.target as HTMLFormElement).checkValidity()) {
+        return // Form is invalid, errors will be shown by invalid handlers
+      }
+      errors.clear()
+      setValidationErrors([])
+      setSubmitButtonElement(null)
+    }
+
+    function onInput(e: Event) {
+      // Clear error for this field when user starts typing
+      const target = e.target
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return
+
+      const fieldId = target.id || target.name
+      if (fieldId && errors.has(fieldId)) {
+        errors.delete(fieldId)
+        const remainingErrors = Array.from(errors.values())
+        setValidationErrors(remainingErrors)
+        // Clear submit button reference if no more errors
+        if (remainingErrors.length === 0) {
+          setSubmitButtonElement(null)
+        }
+      }
+    }
+
+    // Listen for invalid events (capture phase to catch all)
+    container.addEventListener('invalid', onInvalid, true)
+    container.addEventListener('submit', onSubmit)
+    container.addEventListener('input', onInput, true)
+
+    return () => {
+      container.removeEventListener('invalid', onInvalid, true)
+      container.removeEventListener('submit', onSubmit)
+      container.removeEventListener('input', onInput, true)
+    }
+  }, [disabled, userId]) // Re-run when userId changes (containerRef becomes available)
 
   // ------------------------------------------------------------------
   // Re-broadcast cursor when tab becomes visible (fixes throttling)
@@ -1258,6 +1511,13 @@ export function CollaborationHarness({
     send({ type: 'FORM_SUBMITTED' })
   }, [send])
 
+  const clearForm = useCallback(() => {
+    send({ type: 'CLEAR_FORM' })
+    // Also clear local state
+    setRemoteFieldValues({})
+    setDrafts({})
+  }, [send])
+
   // ------------------------------------------------------------------
   // Context value
   // ------------------------------------------------------------------
@@ -1278,8 +1538,9 @@ export function CollaborationHarness({
       touchCursorMode,
       setTouchCursorMode,
       sendFormSubmit,
+      clearForm,
     }),
-    [connected, userId, name, color, cursorMessage, currentSubmitMode, users, readyStates, markReady, unmarkReady, updateUser, setCursorMessage, touchCursorMode, sendFormSubmit],
+    [connected, userId, name, color, cursorMessage, currentSubmitMode, users, readyStates, markReady, unmarkReady, updateUser, setCursorMessage, touchCursorMode, sendFormSubmit, clearForm],
   )
 
   // ------------------------------------------------------------------
@@ -1304,9 +1565,11 @@ export function CollaborationHarness({
       touchCursorMode: false,
       setTouchCursorMode: () => {},
       sendFormSubmit: () => {},
+      clearForm: () => {},
     }),
     [],
   )
+
 
   if (disabled) {
     return (
@@ -1361,48 +1624,44 @@ export function CollaborationHarness({
         <div
           style={{
             position: 'fixed',
-            left: touchCursorPosition.x,
-            top: touchCursorPosition.y + 25, // Offset 25px below finger (visible but not too far)
-            width: 24,
-            height: 24,
+            left: touchCursorPosition.x - 8,
+            top: touchCursorPosition.y - 50, // Offset 50px above finger so it's visible
+            width: 32,
+            height: 32,
             pointerEvents: 'none',
             zIndex: 9999,
-            transform: 'translate(-50%, -50%)',
             willChange: 'transform', // Optimize for smooth movement
+            animation: 'cursorFadeIn 0.15s ease-out',
           }}
           aria-hidden="true"
         >
-          {/* Crosshair cursor */}
-          <div
+          {/* Mouse pointer cursor */}
+          <svg
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
             style={{
-              position: 'absolute',
-              width: 24,
-              height: 24,
-              borderRadius: '50%',
-              border: `2px solid ${color}`,
-              backgroundColor: 'rgba(255, 255, 255, 0.9)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))',
             }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 2,
-              height: 24,
-              left: 11,
-              backgroundColor: color,
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 24,
-              height: 2,
-              top: 11,
-              backgroundColor: color,
-            }}
-          />
+          >
+            <path
+              d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"
+              fill={color}
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+          </svg>
         </div>
+      )}
+
+      {/* Validation error notification - positioned below submit button */}
+      {validationErrors.length > 0 && submitButtonElement && (
+        <ValidationErrorNotification
+          errors={validationErrors}
+          submitButton={submitButtonElement}
+          onDismiss={() => setValidationErrors([])}
+        />
       )}
 
       {/* Tiny connection-status dot */}

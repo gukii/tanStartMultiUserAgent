@@ -14,3 +14,15 @@
   transition: left 80ms ease-out, top 80ms ease-out;
   will-change: transform;
 }
+
+/* Touch cursor fade-in animation */
+@keyframes cursorFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

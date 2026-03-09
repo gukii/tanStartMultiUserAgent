@@ -103,7 +103,8 @@ export function TelemetryEventCapture({ children }: TelemetryEventCaptureProps) 
     // Validation Error Tracking
     // ========================================================================
     function onInvalid(e: Event) {
-      e.preventDefault(); // Prevent default browser validation UI
+      // DON'T call e.preventDefault() - we want the CollaborationHarness
+      // to handle validation errors and show the error notification UI
 
       const target = e.target as HTMLInputElement;
       if (!isFormField(target)) return;

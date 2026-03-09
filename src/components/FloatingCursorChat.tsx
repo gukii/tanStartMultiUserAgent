@@ -112,13 +112,9 @@ export function FloatingCursorChat({
           title={`Touch cursor mode: ${touchCursorMode ? 'ON' : 'OFF'}`}
           aria-label="Toggle touch cursor"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            {/* Crosshair icon */}
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="2" x2="12" y2="8"/>
-            <line x1="12" y1="16" x2="12" y2="22"/>
-            <line x1="2" y1="12" x2="8" y2="12"/>
-            <line x1="16" y1="12" x2="22" y2="12"/>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            {/* Mouse pointer icon */}
+            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
           </svg>
         </button>
       )}

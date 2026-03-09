@@ -124,6 +124,7 @@ export type ClientMessage =
   | { type: 'UNMARK_READY' }
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
   | { type: 'FORM_SUBMITTED' } // Notify all peers that form was submitted
+  | { type: 'CLEAR_FORM' } // Clear all field values, drafts, and ready states
   | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number } // Telemetry data batch
 
 /** Messages the server sends to clients */
@@ -144,6 +145,7 @@ export type ServerMessage =
   | { type: 'READY_STATE_CHANGE'; userId: string; isReady: boolean }
   | { type: 'SUBMIT_MODE_CHANGE'; mode: 'any' | 'consensus' }
   | { type: 'FORM_SUBMITTED'; userId: string } // Broadcast form submission to all peers
+  | { type: 'FORM_CLEARED' } // Broadcast form clear to all peers
   | { type: 'TELEMETRY_ACK'; sequenceId: number; status: 'success' | 'error'; error?: string } // Telemetry acknowledgment
 
 /** Union of all messages (client or server direction) */
@@ -182,4 +184,8 @@ export interface CollaborationHarnessProps {
   onSchemaUpdate?: (schema: FieldSchema[]) => void
   /** Called when any peer submits the form (in consensus mode). */
   onFormSubmit?: (submittedByUserId: string) => void
+  /** Called when any peer clears the form. */
+  onFormClear?: () => void
+  /** Called when any peer changes the submit mode. */
+  onSubmitModeChange?: (mode: 'any' | 'consensus') => void
 }

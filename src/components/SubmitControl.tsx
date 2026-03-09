@@ -76,26 +76,20 @@ export function SubmitControl({
     prevAllReady.current = allReady
   }, [allReady, submitMode, connected, onSubmit, sendFormSubmit])
 
-  if (!connected) {
-    // Offline fallback – just a regular submit button
-    return (
-      <button type="submit" className={className} onClick={onSubmit}>
-        {submitText}
-      </button>
-    )
-  }
+  // Wrap everything in a consistent container to prevent jank
+  const content = (() => {
+    if (!connected || submitMode === 'any') {
+      // Offline fallback or 'any' mode – just a regular submit button
+      return (
+        <button type="submit" className={className} onClick={onSubmit}>
+          {submitText}
+        </button>
+      )
+    }
 
-  if (submitMode === 'any') {
+    // Consensus mode
     return (
-      <button type="submit" className={className} onClick={onSubmit}>
-        {submitText}
-      </button>
-    )
-  }
-
-  // Consensus mode
-  return (
-    <div className="space-y-3">
+      <div className="space-y-3">
       {/* Ready status list - fixed height to prevent UI jank */}
       <div className="rounded-lg border border-gray-200 bg-gray-50 p-4" style={{ minHeight: '120px' }}>
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
@@ -153,6 +147,13 @@ export function SubmitControl({
           ✓ All ready! Auto-submitting...
         </div>
       )}
+    </div>
+    )
+  })()
+
+  return (
+    <div style={{ minHeight: '200px' }} className="transition-all duration-300">
+      {content}
     </div>
   )
 }

@@ -29,14 +29,19 @@ export const Route = createFileRoute('/demo')({
 function CheckoutForm({
   submitted,
   setSubmitted,
-  onReset
+  onReset,
+  submittedBy,
+  setSubmittedBy,
 }: {
   submitted: boolean
   setSubmitted: (submitted: boolean) => void
   onReset: () => void
+  submittedBy: string | null
+  setSubmittedBy: (userId: string | null) => void
 }) {
   const [mounted, setMounted] = useState(false)
   const [formKey, setFormKey] = useState(0)
+  const { unmarkReady, clearForm, sendFormSubmit, userId, users } = useCollaboration()
   const firstId = useId()
   const lastId = useId()
   const emailId = useId()
@@ -83,8 +88,17 @@ function CheckoutForm({
       keysToRemove.forEach((key) => localStorage.removeItem(key))
     }
 
+    // Clear server-side field values and drafts
+    clearForm()
+
     // Reset submitted state and mark that user has manually reset
     onReset()
+
+    // Clear who submitted
+    setSubmittedBy(null)
+
+    // Clear ready state if in consensus mode
+    unmarkReady()
 
     // Force re-render by changing key
     setFormKey((k) => k + 1)
@@ -95,10 +109,18 @@ function CheckoutForm({
   }
 
   if (submitted) {
+    const submittedByUser = submittedBy ? users[submittedBy] : null
+    const submitterName = submittedByUser?.name || (submittedBy === userId ? 'You' : 'Someone')
+
     return (
       <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center sm:p-8">
         <div className="mb-2 text-4xl">✅</div>
         <h2 className="text-lg font-semibold text-green-800 sm:text-xl">Order placed!</h2>
+        {submittedBy && (
+          <p className="mt-2 text-sm text-green-700">
+            Submitted by: {submittedBy === userId ? 'You' : submitterName}
+          </p>
+        )}
         <button
           className="mt-3 text-sm text-green-700 underline sm:mt-4"
           onClick={resetForm}
@@ -115,7 +137,21 @@ function CheckoutForm({
       className="grid gap-4 sm:gap-6"
       onSubmit={(e) => {
         e.preventDefault()
+
+        // Check if form is valid
+        const form = e.currentTarget
+        if (!form.checkValidity()) {
+          // Trigger validation UI
+          form.reportValidity()
+          return
+        }
+
+        // Broadcast form submission to all peers
+        sendFormSubmit()
+        // Set local submitted state
         setSubmitted(true)
+        // Track that we submitted it
+        setSubmittedBy(userId)
       }}
     >
       <fieldset className="grid gap-3 sm:gap-4 sm:grid-cols-2">
@@ -124,39 +160,42 @@ function CheckoutForm({
         </legend>
         <div>
           <label htmlFor={firstId} className="mb-1 block text-sm font-medium text-gray-700">
-            First name
+            First name <span className="text-red-500">*</span>
           </label>
           <input
             id={firstId}
             name="firstName"
             type="text"
             placeholder="Alice"
+            required
             data-ai-intent="Customer first name"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
         </div>
         <div>
           <label htmlFor={lastId} className="mb-1 block text-sm font-medium text-gray-700">
-            Last name
+            Last name <span className="text-red-500">*</span>
           </label>
           <input
             id={lastId}
             name="lastName"
             type="text"
             placeholder="Smith"
+            required
             data-ai-intent="Customer last name"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
         </div>
         <div className="sm:col-span-2">
           <label htmlFor={emailId} className="mb-1 block text-sm font-medium text-gray-700">
-            Email
+            Email <span className="text-red-500">*</span>
           </label>
           <input
             id={emailId}
             name="email"
             type="email"
             placeholder="alice@example.com"
+            required
             data-ai-intent="Customer email address"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -169,39 +208,45 @@ function CheckoutForm({
         </legend>
         <div className="sm:col-span-2">
           <label htmlFor={cardId} className="mb-1 block text-sm font-medium text-gray-700">
-            Card number
+            Card number <span className="text-red-500">*</span>
           </label>
           <input
             id={cardId}
             name="cardNumber"
             type="text"
             placeholder="4242 4242 4242 4242"
+            pattern="[\d\s]{13,19}"
+            required
             data-ai-intent="16-digit credit card number"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
         </div>
         <div>
           <label htmlFor={expiryId} className="mb-1 block text-sm font-medium text-gray-700">
-            Expiry
+            Expiry <span className="text-red-500">*</span>
           </label>
           <input
             id={expiryId}
             name="expiry"
             type="text"
             placeholder="MM/YY"
+            pattern="\d{2}/\d{2}"
+            required
             data-ai-intent="Card expiry date in MM/YY format"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
         </div>
         <div>
           <label htmlFor={cvvId} className="mb-1 block text-sm font-medium text-gray-700">
-            CVV
+            CVV <span className="text-red-500">*</span>
           </label>
           <input
             id={cvvId}
             name="cvv"
             type="text"
             placeholder="123"
+            pattern="\d{3,4}"
+            required
             data-ai-intent="3 or 4 digit card security code"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
@@ -214,37 +259,40 @@ function CheckoutForm({
         </legend>
         <div className="sm:col-span-2">
           <label htmlFor={addressId} className="mb-1 block text-sm font-medium text-gray-700">
-            Street address
+            Street address <span className="text-red-500">*</span>
           </label>
           <input
             id={addressId}
             name="address"
             type="text"
             placeholder="123 Main St"
+            required
             data-ai-intent="Street address including house number"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
         </div>
         <div>
           <label htmlFor={cityId} className="mb-1 block text-sm font-medium text-gray-700">
-            City
+            City <span className="text-red-500">*</span>
           </label>
           <input
             id={cityId}
             name="city"
             type="text"
             placeholder="San Francisco"
+            required
             data-ai-intent="City name"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
         </div>
         <div>
           <label htmlFor={countryId} className="mb-1 block text-sm font-medium text-gray-700">
-            Country
+            Country <span className="text-red-500">*</span>
           </label>
           <select
             id={countryId}
             name="country"
+            required
             data-ai-intent="Country selection"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           >
@@ -431,12 +479,14 @@ function DemoPage() {
   const [submitMode, setSubmitMode] = useState<'any' | 'consensus'>('consensus')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [submittedBy, setSubmittedBy] = useState<string | null>(null)
   const hasResetRef = useRef(false)
 
   // Handler to mark that user has manually reset the form
   const handleReset = useCallback(() => {
     hasResetRef.current = true
     setSubmitted(false)
+    setSubmittedBy(null)
   }, [])
 
   // Load floating chat position from localStorage, default to bottom-left
@@ -459,11 +509,24 @@ function DemoPage() {
       roomId={roomId}
       partyKitHost={partyKitHost}
       submitMode={submitMode}
-      onFormSubmit={() => {
+      onFormSubmit={(submittedByUserId) => {
         // Don't set submitted if user has manually reset the form
         if (!hasResetRef.current) {
           setSubmitted(true)
+          setSubmittedBy(submittedByUserId)
         }
+      }}
+      onFormClear={() => {
+        // When any peer clears the form, reset our local state
+        console.log('[Demo] Form cleared by a peer - resetting local state')
+        setSubmitted(false)
+        setSubmittedBy(null)
+        hasResetRef.current = false
+      }}
+      onSubmitModeChange={(mode) => {
+        // When any peer changes submit mode, sync it locally
+        console.log('[Demo] Submit mode changed by a peer to:', mode)
+        setSubmitMode(mode)
       }}
     >
       <DemoPageContent
@@ -475,6 +538,8 @@ function DemoPage() {
         roomId={roomId}
         submitted={submitted}
         setSubmitted={setSubmitted}
+        submittedBy={submittedBy}
+        setSubmittedBy={setSubmittedBy}
         onReset={handleReset}
         floatingChatPosition={floatingChatPosition}
         setFloatingChatPosition={setFloatingChatPosition}
@@ -492,6 +557,8 @@ function DemoPageContent({
   roomId,
   submitted,
   setSubmitted,
+  submittedBy,
+  setSubmittedBy,
   onReset,
   floatingChatPosition,
   setFloatingChatPosition,
@@ -504,6 +571,8 @@ function DemoPageContent({
   roomId: string
   submitted: boolean
   setSubmitted: (submitted: boolean) => void
+  submittedBy: string | null
+  setSubmittedBy: (userId: string | null) => void
   onReset: () => void
   floatingChatPosition: FloatingChatPosition
   setFloatingChatPosition: (position: FloatingChatPosition) => void
@@ -553,7 +622,13 @@ function DemoPageContent({
 
       {/* The checkout form wrapped with collaboration */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-8">
-        <CheckoutForm submitted={submitted} setSubmitted={setSubmitted} onReset={onReset} />
+        <CheckoutForm
+          submitted={submitted}
+          setSubmitted={setSubmitted}
+          submittedBy={submittedBy}
+          setSubmittedBy={setSubmittedBy}
+          onReset={onReset}
+        />
       </div>
 
       {/* User settings panel (inside harness to access context) */}

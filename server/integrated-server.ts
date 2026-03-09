@@ -104,6 +104,7 @@ type IncomingMessage =
   | { type: 'MARK_READY' }
   | { type: 'UNMARK_READY' }
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
+  | { type: 'CLEAR_FORM' }
   | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number }
 
 // ---------------------------------------------------------------------------
@@ -257,6 +258,15 @@ class Room {
         this.submitMode = msg.mode
         this.readyStates.clear()
         this.broadcast({ type: 'SUBMIT_MODE_CHANGE', mode: msg.mode })
+        break
+      case 'CLEAR_FORM':
+        // Clear all field values, drafts, and ready states
+        this.fieldValues.clear()
+        this.drafts.clear()
+        this.readyStates.clear()
+        console.log(`[Room ${this.roomId}] Form cleared by ${userId}`)
+        // Broadcast to ALL clients (including the one who initiated)
+        this.broadcast({ type: 'FORM_CLEARED' })
         break
       case 'FORM_SUBMITTED':
         // Broadcast to all other peers that form was submitted
