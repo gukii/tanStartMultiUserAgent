@@ -55,17 +55,40 @@ export function SubmitControl({
   // Track previous allReady state to detect when it transitions to true
   const prevAllReady = useRef(false)
 
+  // Handle marking ready with validation check
+  const handleMarkReady = () => {
+    // Find the form and validate it before marking ready
+    const form = document.querySelector('form')
+    if (form && !form.checkValidity()) {
+      // Form is invalid - trigger validation UI
+      form.reportValidity()
+      return
+    }
+    // Form is valid, mark as ready
+    markReady()
+  }
+
   // Auto-submit in consensus mode when everyone becomes ready
   useEffect(() => {
     if (submitMode === 'consensus' && allReady && !prevAllReady.current && connected) {
-      // All peers just became ready - broadcast submit and trigger form submit
+      // All peers just became ready - validate then broadcast submit
       const timer = setTimeout(() => {
-        // Send FORM_SUBMITTED message to all peers
+        const form = document.querySelector('form')
+
+        // Double-check form validity before submitting
+        if (form && !form.checkValidity()) {
+          // Form is invalid - this shouldn't happen if everyone validated before marking ready
+          // but we check anyway as a safety measure
+          console.warn('[SubmitControl] Form validation failed during auto-submit')
+          form.reportValidity()
+          return
+        }
+
+        // Form is valid, proceed with submission
         sendFormSubmit()
 
         // Trigger actual form submit
         onSubmit?.()
-        const form = document.querySelector('form')
         if (form && !onSubmit) {
           form.requestSubmit()
         }
@@ -130,7 +153,7 @@ export function SubmitControl({
       {!allReady && (
         <button
           type="button"
-          onClick={isReady ? unmarkReady : markReady}
+          onClick={isReady ? unmarkReady : handleMarkReady}
           className={`w-full rounded-lg py-3 font-semibold transition-colors ${
             isReady
               ? 'border-2 border-violet-600 bg-white text-violet-600 hover:bg-violet-50'
