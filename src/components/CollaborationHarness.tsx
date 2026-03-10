@@ -906,9 +906,12 @@ export function CollaborationHarness({
         const form = (target as HTMLElement).closest('form')
         if (form) {
           // Look for submit button - try multiple selectors
-          foundSubmitButton = form.querySelector('button[type="submit"]') as HTMLElement
-            || form.querySelector('button:not([type])') as HTMLElement
-            || form.querySelector('input[type="submit"]') as HTMLElement
+          // Strategy: Find the last button in the form (usually the main action button)
+          const submitBtn = form.querySelector('button[type="submit"]') as HTMLElement
+          const allButtons = Array.from(form.querySelectorAll('button')) as HTMLElement[]
+          const lastButton = allButtons[allButtons.length - 1]
+
+          foundSubmitButton = submitBtn || lastButton || form.querySelector('input[type="submit"]') as HTMLElement
         }
       }
 
