@@ -1,7 +1,7 @@
 /**
  * UserSettingsPanel
  *
- * Floating panel for users to change their name, color, and cursor message.
+ * Floating panel for users to change their name and color.
  * Triggered by clicking a settings icon or keyboard shortcut.
  */
 
@@ -19,11 +19,9 @@ interface UserSettingsPanelProps {
   onClose: () => void
   userName: string
   userColor: string
-  cursorMessage: string
   floatingChatPosition: FloatingChatPosition
   submitMode: 'any' | 'consensus'
   updateUser: (name: string, color: string) => void
-  setCursorMessage: (message: string) => void
   setFloatingChatPosition: (position: FloatingChatPosition) => void
   setSubmitMode: (mode: 'any' | 'consensus') => void
 }
@@ -33,17 +31,14 @@ export function UserSettingsPanel({
   onClose,
   userName,
   userColor,
-  cursorMessage,
   floatingChatPosition,
   submitMode,
   updateUser,
-  setCursorMessage,
   setFloatingChatPosition,
   setSubmitMode,
 }: UserSettingsPanelProps) {
   const [name, setName] = useState(userName)
   const [color, setColor] = useState(userColor)
-  const [message, setMessage] = useState(cursorMessage)
   const [position, setPosition] = useState<FloatingChatPosition>(floatingChatPosition)
   const [mode, setMode] = useState<'any' | 'consensus'>(submitMode)
 
@@ -51,10 +46,9 @@ export function UserSettingsPanel({
   useEffect(() => {
     setName(userName)
     setColor(userColor)
-    setMessage(cursorMessage)
     setPosition(floatingChatPosition)
     setMode(submitMode)
-  }, [userName, userColor, cursorMessage, floatingChatPosition, submitMode])
+  }, [userName, userColor, floatingChatPosition, submitMode])
 
   if (!isOpen) return null
 
@@ -62,15 +56,9 @@ export function UserSettingsPanel({
     if (name.trim()) {
       updateUser(name.trim(), color)
     }
-    setCursorMessage(message)
     setFloatingChatPosition(position)
     setSubmitMode(mode)
     onClose()
-  }
-
-  function handleClearMessage() {
-    setMessage('')
-    setCursorMessage('')
   }
 
   return (
@@ -84,13 +72,13 @@ export function UserSettingsPanel({
 
       {/* Panel */}
       <div
-        className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-6 z-50 w-full max-w-md"
+        className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl p-4 z-50 w-full max-w-md"
         style={{ pointerEvents: 'auto' }}
       >
-        <h2 className="text-lg font-bold text-gray-900 mb-4">Your Profile</h2>
+        <h2 className="text-lg font-bold text-gray-900 mb-3">Settings</h2>
 
         {/* Name */}
-        <div className="mb-4">
+        <div className="mb-3">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Your name
           </label>
@@ -101,14 +89,11 @@ export function UserSettingsPanel({
             placeholder="e.g., Chris Santa"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
-          <p className="mt-1 text-xs text-gray-500">
-            Initials will be shown next to your cursor
-          </p>
         </div>
 
         {/* Color picker */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Your color
           </label>
           <div className="grid grid-cols-6 gap-2">
@@ -126,40 +111,15 @@ export function UserSettingsPanel({
           </div>
         </div>
 
-        {/* Cursor message */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Cursor message (optional)
-          </label>
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="e.g., look at the eyes of this fish!"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Shown next to your cursor for coaching (hidden when typing)
-          </p>
-          {message && (
-            <button
-              onClick={handleClearMessage}
-              className="mt-2 text-xs text-violet-600 hover:underline"
-            >
-              Clear message
-            </button>
-          )}
-        </div>
-
         {/* Submit mode */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Submit mode
           </label>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setMode('any')}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 mode === 'any'
                   ? 'border-violet-600 bg-violet-50 text-violet-700'
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -169,7 +129,7 @@ export function UserSettingsPanel({
             </button>
             <button
               onClick={() => setMode('consensus')}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 mode === 'consensus'
                   ? 'border-violet-600 bg-violet-50 text-violet-700'
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -178,20 +138,17 @@ export function UserSettingsPanel({
               👥 Consensus
             </button>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            {mode === 'any' ? 'Any peer can submit the form' : 'All peers must mark ready before submitting'}
-          </p>
         </div>
 
         {/* Floating chat position */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Chat controls position
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Controls position
           </label>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setPosition('top-left')}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 position === 'top-left'
                   ? 'border-violet-600 bg-violet-50 text-violet-700'
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -201,7 +158,7 @@ export function UserSettingsPanel({
             </button>
             <button
               onClick={() => setPosition('top-right')}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 position === 'top-right'
                   ? 'border-violet-600 bg-violet-50 text-violet-700'
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -211,7 +168,7 @@ export function UserSettingsPanel({
             </button>
             <button
               onClick={() => setPosition('bottom-left')}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 position === 'bottom-left'
                   ? 'border-violet-600 bg-violet-50 text-violet-700'
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -221,7 +178,7 @@ export function UserSettingsPanel({
             </button>
             <button
               onClick={() => setPosition('bottom-right')}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 position === 'bottom-right'
                   ? 'border-violet-600 bg-violet-50 text-violet-700'
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -230,9 +187,6 @@ export function UserSettingsPanel({
               ↘ Bottom Right
             </button>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Choose where to display the cursor chat and settings button
-          </p>
         </div>
 
         {/* Actions */}

@@ -498,18 +498,16 @@ function SettingsPanelWrapper({
   submitMode: 'any' | 'consensus'
   setSubmitMode: (mode: 'any' | 'consensus') => void
 }) {
-  const { userName, userColor, cursorMessage, updateUser, setCursorMessage } = useCollaboration()
+  const { userName, userColor, updateUser } = useCollaboration()
   return (
     <UserSettingsPanel
       isOpen={isOpen}
       onClose={onClose}
       userName={userName}
       userColor={userColor}
-      cursorMessage={cursorMessage}
       floatingChatPosition={floatingChatPosition}
       submitMode={submitMode}
       updateUser={updateUser}
-      setCursorMessage={setCursorMessage}
       setFloatingChatPosition={setFloatingChatPosition}
       setSubmitMode={setSubmitMode}
     />
