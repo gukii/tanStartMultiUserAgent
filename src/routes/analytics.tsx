@@ -83,9 +83,11 @@ function AnalyticsPage() {
       try {
         setLoading(true)
         const result = await getAnalytics({ timeRange })
+        console.log('[Analytics] Fetched data:', result)
         setData(result)
         setError(null)
       } catch (err) {
+        console.error('[Analytics] Fetch error:', err)
         setError(String(err))
       } finally {
         setLoading(false)
@@ -117,13 +119,27 @@ function AnalyticsPage() {
     )
   }
 
-  if (!data) {
-    return null
+  if (!data || !data.users) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="max-w-md rounded-xl border border-yellow-200 bg-yellow-50 p-6 text-center">
+          <div className="mb-2 text-4xl">📊</div>
+          <h2 className="mb-2 text-lg font-semibold text-yellow-800">No Data Available</h2>
+          <p className="text-sm text-yellow-700">
+            No analytics data found. Start using the demo pages to generate telemetry data.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   const filteredUsers = selectedUser
-    ? data.users.filter((u) => u.userId === selectedUser)
-    : data.users
+    ? (data.users || []).filter((u) => u.userId === selectedUser)
+    : (data.users || [])
+
+  const collaborations = data.collaborations || []
+  const fieldPreferences = data.fieldPreferences || []
+  const timeSeriesData = data.timeSeriesData || []
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
@@ -171,7 +187,7 @@ function AnalyticsPage() {
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             >
               <option value="">All Users</option>
-              {data.users.map((user) => (
+              {(data.users || []).map((user) => (
                 <option key={user.userId} value={user.userId}>
                   {user.userName}
                 </option>
@@ -240,7 +256,7 @@ function AnalyticsPage() {
         <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">🤝 Collaboration Sessions</h2>
           <div className="space-y-4">
-            {data.collaborations.map((collab) => (
+            {collaborations.map((collab) => (
               <div
                 key={collab.sessionId}
                 className="rounded-lg border border-gray-200 p-4"
@@ -277,7 +293,7 @@ function AnalyticsPage() {
                 </div>
               </div>
             ))}
-            {data.collaborations.length === 0 && (
+            {collaborations.length === 0 && (
               <div className="py-8 text-center text-gray-500">
                 No collaboration sessions in this time range
               </div>
@@ -289,7 +305,7 @@ function AnalyticsPage() {
         <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">📝 Field Preferences During Teamwork</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {data.fieldPreferences.map((field) => (
+            {fieldPreferences.map((field) => (
               <div
                 key={field.fieldId}
                 className="rounded-lg border border-gray-200 p-4"
@@ -304,7 +320,7 @@ function AnalyticsPage() {
                 </div>
               </div>
             ))}
-            {data.fieldPreferences.length === 0 && (
+            {fieldPreferences.length === 0 && (
               <div className="col-span-full py-8 text-center text-gray-500">
                 No field data available
               </div>
@@ -317,7 +333,7 @@ function AnalyticsPage() {
           <div className="rounded-xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">📈 Learning Curve</h2>
             <div className="space-y-2">
-              {data.timeSeriesData
+              {timeSeriesData
                 .filter((d) => d.userId === selectedUser)
                 .map((point, idx) => (
                   <div key={idx} className="flex items-center gap-4">
