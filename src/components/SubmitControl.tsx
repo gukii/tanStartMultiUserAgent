@@ -76,7 +76,8 @@ export function SubmitControl({
             element instanceof HTMLSelectElement) {
           if (!element.validity.valid) {
             // Dispatch invalid event that CollaborationHarness will catch
-            const invalidEvent = new Event('invalid', { bubbles: false, cancelable: true })
+            // Note: bubbles must be true so event reaches the container element
+            const invalidEvent = new Event('invalid', { bubbles: true, cancelable: true })
             element.dispatchEvent(invalidEvent)
           }
         }
@@ -108,7 +109,8 @@ export function SubmitControl({
                 element instanceof HTMLTextAreaElement ||
                 element instanceof HTMLSelectElement) {
               if (!element.validity.valid) {
-                const invalidEvent = new Event('invalid', { bubbles: false, cancelable: true })
+                // Note: bubbles must be true so event reaches the container element
+                const invalidEvent = new Event('invalid', { bubbles: true, cancelable: true })
                 element.dispatchEvent(invalidEvent)
               }
             }
