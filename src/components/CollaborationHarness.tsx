@@ -68,63 +68,147 @@ function randomName() {
 }
 
 /**
+ * Smart validation anchor finder with fallback strategies
+ * Returns the element to position validation errors relative to
+ */
+function findValidationAnchor(
+  form: HTMLFormElement | null,
+  anchorSelector: string
+): HTMLElement | null {
+  if (!form) return null
+
+  // Strategy 1: User-provided selector (highest priority)
+  if (anchorSelector && anchorSelector !== 'auto') {
+    const custom = form.querySelector(anchorSelector) as HTMLElement
+    if (custom) return custom
+  }
+
+  // Strategy 2: Element with data-validation-anchor attribute
+  const dataAnchor = form.querySelector('[data-validation-anchor]') as HTMLElement
+  if (dataAnchor) return dataAnchor
+
+  // Strategy 3: Submit button
+  const submitBtn = form.querySelector('button[type="submit"]') as HTMLElement
+  if (submitBtn) return submitBtn
+
+  // Strategy 4: Last button in form (for consensus mode, custom buttons)
+  const allButtons = Array.from(form.querySelectorAll('button')) as HTMLElement[]
+  if (allButtons.length > 0) return allButtons[allButtons.length - 1]
+
+  // Strategy 5: Input submit
+  const inputSubmit = form.querySelector('input[type="submit"]') as HTMLElement
+  if (inputSubmit) return inputSubmit
+
+  // Strategy 6: Button with form attribute pointing to this form
+  if (form.id) {
+    const externalButton = document.querySelector(`button[form="${form.id}"]`) as HTMLElement
+    if (externalButton) return externalButton
+  }
+
+  // Strategy 7: Last element in form (fallback to form end)
+  const formElements = Array.from(form.querySelectorAll('input, textarea, select, button'))
+  if (formElements.length > 0) {
+    return formElements[formElements.length - 1] as HTMLElement
+  }
+
+  // Strategy 8: The form itself
+  return form
+}
+
+/**
  * Validation error notification component
- * Positions itself below the submit button using React Portal
+ * Positions itself relative to anchor using React Portal
  */
 function ValidationErrorNotification({
   errors,
-  submitButton,
+  anchor,
+  position,
   onDismiss,
 }: {
   errors: Array<{ fieldId: string; fieldLabel: string; message: string }>
-  submitButton: HTMLElement
+  anchor: HTMLElement | null
+  position: 'below' | 'above' | 'fixed-top' | 'fixed-bottom'
   onDismiss: () => void
 }) {
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
+  const [isFixed, setIsFixed] = useState(false)
 
   useEffect(() => {
-    if (!submitButton) return
+    // Handle fixed positioning (no anchor needed)
+    if (position === 'fixed-top' || position === 'fixed-bottom') {
+      const container = document.createElement('div')
+      container.setAttribute('data-validation-errors', 'true')
+      container.style.position = 'fixed'
+      container.style[position === 'fixed-top' ? 'top' : 'bottom'] = '1rem'
+      container.style.left = '50%'
+      container.style.transform = 'translateX(-50%)'
+      container.style.zIndex = '9999'
+      container.style.maxWidth = '600px'
+      container.style.width = '90%'
+      document.body.appendChild(container)
+      setPortalContainer(container)
+      setIsFixed(true)
 
-    // Create a container for the portal
-    const container = document.createElement('div')
-    container.setAttribute('data-validation-errors', 'true')
-    container.style.marginTop = '0.5rem'
-    container.style.width = '100%'
-
-    // Find the best place to insert: after the submit button or its wrapper
-    // First, check if the button is inside a SubmitControl wrapper (div with minHeight)
-    let insertAfter = submitButton
-    const parent = submitButton.parentElement
-
-    if (parent) {
-      // If parent has minHeight style, it's likely the SubmitControl wrapper
-      const parentStyle = window.getComputedStyle(parent)
-      if (parentStyle.minHeight && parent.querySelector('button[type="submit"]')) {
-        insertAfter = parent
+      return () => {
+        if (container && container.parentElement) {
+          container.parentElement.removeChild(container)
+        }
+        setPortalContainer(null)
       }
     }
 
-    // Insert the container after the submit button (or its wrapper)
-    const insertParent = insertAfter.parentElement
+    // Handle relative positioning (needs anchor)
+    if (!anchor) return
+
+    const container = document.createElement('div')
+    container.setAttribute('data-validation-errors', 'true')
+    container.style.width = '100%'
+
+    // Position relative to anchor
+    if (position === 'below') {
+      container.style.marginTop = '0.5rem'
+    } else if (position === 'above') {
+      container.style.marginBottom = '0.5rem'
+    }
+
+    // Find the best place to insert
+    let insertTarget = anchor
+    const parent = anchor.parentElement
+
+    if (parent) {
+      // Check if anchor is inside a wrapper (like SubmitControl)
+      const parentStyle = window.getComputedStyle(parent)
+      if (parentStyle.minHeight && parent.querySelector('button')) {
+        insertTarget = parent
+      }
+    }
+
+    const insertParent = insertTarget.parentElement
     if (insertParent) {
-      const nextSibling = insertAfter.nextSibling
-      if (nextSibling) {
-        insertParent.insertBefore(container, nextSibling)
+      if (position === 'above') {
+        // Insert before the anchor
+        insertParent.insertBefore(container, insertTarget)
       } else {
-        insertParent.appendChild(container)
+        // Insert after the anchor
+        const nextSibling = insertTarget.nextSibling
+        if (nextSibling) {
+          insertParent.insertBefore(container, nextSibling)
+        } else {
+          insertParent.appendChild(container)
+        }
       }
     }
 
     setPortalContainer(container)
+    setIsFixed(false)
 
-    // Cleanup: remove container when unmounting
     return () => {
       if (container && container.parentElement) {
         container.parentElement.removeChild(container)
       }
       setPortalContainer(null)
     }
-  }, [submitButton])
+  }, [anchor, position])
 
   if (!portalContainer) return null
 
@@ -244,6 +328,8 @@ export function CollaborationHarness({
   onFormSubmit,
   onFormClear,
   onSubmitModeChange,
+  validationAnchor = 'auto',
+  validationPosition = 'below',
 }: CollaborationHarnessProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -901,16 +987,10 @@ export function CollaborationHarness({
         message: target.validationMessage,
       })
 
-      // Find the submit button for positioning (always search fresh in case mode changed)
-      const form = (target as HTMLElement).closest('form')
-      if (form && !foundSubmitButton) {
-        // Look for submit button - try multiple selectors
-        // Strategy: Find the last button in the form (usually the main action button)
-        const submitBtn = form.querySelector('button[type="submit"]') as HTMLElement
-        const allButtons = Array.from(form.querySelectorAll('button')) as HTMLElement[]
-        const lastButton = allButtons[allButtons.length - 1]
-
-        foundSubmitButton = submitBtn || lastButton || form.querySelector('input[type="submit"]') as HTMLElement
+      // Find the validation anchor for positioning (always search fresh in case mode changed)
+      if (!foundSubmitButton) {
+        const form = (target as HTMLElement).closest('form')
+        foundSubmitButton = findValidationAnchor(form, validationAnchor)
       }
 
       // Clear any pending update
@@ -965,7 +1045,7 @@ export function CollaborationHarness({
       container.removeEventListener('submit', onSubmit)
       container.removeEventListener('input', onInput, true)
     }
-  }, [disabled, userId, currentSubmitMode]) // Re-run when submit mode changes (button changes)
+  }, [disabled, userId, currentSubmitMode, validationAnchor]) // Re-run when config changes
 
   // Clear validation errors when submit mode changes (button changes)
   useEffect(() => {
@@ -1662,11 +1742,12 @@ export function CollaborationHarness({
         </div>
       )}
 
-      {/* Validation error notification - positioned below submit button */}
-      {validationErrors.length > 0 && submitButtonElement && (
+      {/* Validation error notification - positioned relative to anchor */}
+      {validationErrors.length > 0 && (validationPosition.startsWith('fixed') || submitButtonElement) && (
         <ValidationErrorNotification
           errors={validationErrors}
-          submitButton={submitButtonElement}
+          anchor={submitButtonElement}
+          position={validationPosition}
           onDismiss={() => setValidationErrors([])}
         />
       )}

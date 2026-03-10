@@ -188,4 +188,22 @@ export interface CollaborationHarnessProps {
   onFormClear?: () => void
   /** Called when any peer changes the submit mode. */
   onSubmitModeChange?: (mode: 'any' | 'consensus') => void
+  /**
+   * CSS selector or 'auto' to position validation errors.
+   * Examples: '#submit-button', '[data-submit-anchor]', 'auto' (default)
+   *
+   * 'auto' uses this fallback strategy:
+   * 1. Look for element with [data-validation-anchor] attribute
+   * 2. Look for button[type="submit"]
+   * 3. Look for last <button> in form
+   * 4. Look for input[type="submit"]
+   * 5. Append to end of form
+   * 6. Show fixed at bottom of viewport
+   */
+  validationAnchor?: string
+  /**
+   * Where to position validation errors relative to anchor.
+   * Defaults to 'below'.
+   */
+  validationPosition?: 'below' | 'above' | 'fixed-top' | 'fixed-bottom'
 }
