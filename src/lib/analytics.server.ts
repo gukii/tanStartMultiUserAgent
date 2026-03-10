@@ -4,7 +4,7 @@
  * Queries the telemetry database to generate performance metrics
  */
 
-import { createServerFn } from '@tanstack/start'
+import { createServerFn } from '@tanstack/react-start'
 import { createClient } from '@libsql/client'
 import path from 'node:path'
 
