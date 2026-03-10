@@ -148,7 +148,7 @@ export function SubmitControl({
     return (
       <div className="space-y-3">
       {/* Ready status list - fixed height to prevent UI jank */}
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4" style={{ minHeight: '120px' }}>
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4" style={{ minHeight: '12px' }}>
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
           Ready to submit ({readyCount}/{userList.length})
         </div>
@@ -209,7 +209,10 @@ export function SubmitControl({
   })()
 
   return (
-    <div style={{ minHeight: '200px' }} className="transition-all duration-300">
+    <div
+      style={{ minHeight: submitMode === 'consensus' && connected ? '200px' : 'auto' }}
+      className="transition-all duration-300"
+    >
       {content}
     </div>
   )

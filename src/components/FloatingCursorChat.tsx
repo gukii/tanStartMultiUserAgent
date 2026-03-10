@@ -25,7 +25,7 @@ export function FloatingCursorChat({
   position = 'bottom-right',
   onSettingsClick,
 }: FloatingCursorChatProps) {
-  const { cursorMessage, setCursorMessage, touchCursorMode, setTouchCursorMode } = useCollaboration()
+  const { cursorMessage, setCursorMessage, touchCursorMode, setTouchCursorMode, submitMode } = useCollaboration()
   const [localMessage, setLocalMessage] = useState(cursorMessage)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -118,6 +118,16 @@ export function FloatingCursorChat({
           </svg>
         </button>
       )}
+
+      {/* Submit mode indicator */}
+      <div
+        className="rounded p-1.5 text-violet-100"
+        title={submitMode === 'any' ? 'Submit mode: Any peer can submit' : 'Submit mode: Consensus (all must agree)'}
+      >
+        <span className="text-base leading-none">
+          {submitMode === 'any' ? '👤' : '👥'}
+        </span>
+      </div>
 
       {/* Cursor message input */}
       <input

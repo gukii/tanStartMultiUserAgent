@@ -488,11 +488,15 @@ function SettingsPanelWrapper({
   onClose,
   floatingChatPosition,
   setFloatingChatPosition,
+  submitMode,
+  setSubmitMode,
 }: {
   isOpen: boolean
   onClose: () => void
   floatingChatPosition: FloatingChatPosition
   setFloatingChatPosition: (position: FloatingChatPosition) => void
+  submitMode: 'any' | 'consensus'
+  setSubmitMode: (mode: 'any' | 'consensus') => void
 }) {
   const { userName, userColor, cursorMessage, updateUser, setCursorMessage } = useCollaboration()
   return (
@@ -503,9 +507,11 @@ function SettingsPanelWrapper({
       userColor={userColor}
       cursorMessage={cursorMessage}
       floatingChatPosition={floatingChatPosition}
+      submitMode={submitMode}
       updateUser={updateUser}
       setCursorMessage={setCursorMessage}
       setFloatingChatPosition={setFloatingChatPosition}
+      setSubmitMode={setSubmitMode}
     />
   )
 }
@@ -636,38 +642,6 @@ function DemoPageContent({
           Same as /demo but with comprehensive telemetry tracking enabled.
           All interactions are captured for analysis.
         </p>
-
-        {/* Submit mode toggle */}
-        <div className="mt-3 flex flex-col gap-2 sm:mt-4 sm:flex-row sm:items-center sm:gap-3">
-          <span className="text-xs font-medium text-gray-700 sm:text-sm">Submit mode:</span>
-          <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1">
-            <button
-              onClick={() => setSubmitMode('any')}
-              className={`rounded px-3 py-1 text-sm font-semibold transition ${
-                submitMode === 'any'
-                  ? 'bg-violet-600 text-white'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              Any
-            </button>
-            <button
-              onClick={() => setSubmitMode('consensus')}
-              className={`rounded px-3 py-1 text-sm font-semibold transition ${
-                submitMode === 'consensus'
-                  ? 'bg-violet-600 text-white'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              Consensus
-            </button>
-          </div>
-          <span className="text-xs text-gray-500">
-            {submitMode === 'any'
-              ? 'Any peer can submit'
-              : 'All peers must mark ready'}
-          </span>
-        </div>
       </div>
 
       {/* The checkout form wrapped with collaboration + telemetry */}
@@ -687,6 +661,8 @@ function DemoPageContent({
         onClose={() => setSettingsOpen(false)}
         floatingChatPosition={floatingChatPosition}
         setFloatingChatPosition={setFloatingChatPosition}
+        submitMode={submitMode}
+        setSubmitMode={setSubmitMode}
       />
 
       {/* Floating cursor chat controls */}

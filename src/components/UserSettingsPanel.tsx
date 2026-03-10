@@ -21,9 +21,11 @@ interface UserSettingsPanelProps {
   userColor: string
   cursorMessage: string
   floatingChatPosition: FloatingChatPosition
+  submitMode: 'any' | 'consensus'
   updateUser: (name: string, color: string) => void
   setCursorMessage: (message: string) => void
   setFloatingChatPosition: (position: FloatingChatPosition) => void
+  setSubmitMode: (mode: 'any' | 'consensus') => void
 }
 
 export function UserSettingsPanel({
@@ -33,14 +35,17 @@ export function UserSettingsPanel({
   userColor,
   cursorMessage,
   floatingChatPosition,
+  submitMode,
   updateUser,
   setCursorMessage,
   setFloatingChatPosition,
+  setSubmitMode,
 }: UserSettingsPanelProps) {
   const [name, setName] = useState(userName)
   const [color, setColor] = useState(userColor)
   const [message, setMessage] = useState(cursorMessage)
   const [position, setPosition] = useState<FloatingChatPosition>(floatingChatPosition)
+  const [mode, setMode] = useState<'any' | 'consensus'>(submitMode)
 
   // Update local state when props change
   useEffect(() => {
@@ -48,7 +53,8 @@ export function UserSettingsPanel({
     setColor(userColor)
     setMessage(cursorMessage)
     setPosition(floatingChatPosition)
-  }, [userName, userColor, cursorMessage, floatingChatPosition])
+    setMode(submitMode)
+  }, [userName, userColor, cursorMessage, floatingChatPosition, submitMode])
 
   if (!isOpen) return null
 
@@ -58,6 +64,7 @@ export function UserSettingsPanel({
     }
     setCursorMessage(message)
     setFloatingChatPosition(position)
+    setSubmitMode(mode)
     onClose()
   }
 
@@ -142,6 +149,38 @@ export function UserSettingsPanel({
               Clear message
             </button>
           )}
+        </div>
+
+        {/* Submit mode */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Submit mode
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setMode('any')}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                mode === 'any'
+                  ? 'border-violet-600 bg-violet-50 text-violet-700'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              👤 Any
+            </button>
+            <button
+              onClick={() => setMode('consensus')}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                mode === 'consensus'
+                  ? 'border-violet-600 bg-violet-50 text-violet-700'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              👥 Consensus
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {mode === 'any' ? 'Any peer can submit the form' : 'All peers must mark ready before submitting'}
+          </p>
         </div>
 
         {/* Floating chat position */}
