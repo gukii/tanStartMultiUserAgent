@@ -77,7 +77,10 @@ export const getAnalytics = createServerFn('GET', async (options: { timeRange: '
       '7d': 7 * 24 * 60 * 60 * 1000,
       '30d': 30 * 24 * 60 * 60 * 1000,
     }[options.timeRange]
-    const startTime = now - timeRangeMs
+    const startTimeMs = now - timeRangeMs
+
+    // Convert to seconds for database comparison (telemetry stores Unix timestamps in seconds)
+    const startTime = Math.floor(startTimeMs / 1000)
 
     // Query user metrics
     const userResult = await db.execute({
