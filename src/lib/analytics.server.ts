@@ -5,7 +5,7 @@
  */
 
 import { createServerFn } from '@tanstack/start'
-import Database from 'better-sqlite3'
+import { createClient } from '@libsql/client'
 import path from 'node:path'
 
 interface UserMetrics {
@@ -64,7 +64,9 @@ interface AnalyticsData {
 
 export const getAnalytics = createServerFn('GET', async (options: { timeRange: '1h' | '24h' | '7d' | '30d' }) => {
   const dbPath = path.join(process.cwd(), 'data', 'telemetry.db')
-  const db = new Database(dbPath, { readonly: true })
+  const db = createClient({
+    url: `file:${dbPath}`,
+  })
 
   try {
     // Calculate time range in milliseconds
@@ -78,145 +80,163 @@ export const getAnalytics = createServerFn('GET', async (options: { timeRange: '
     const startTime = now - timeRangeMs
 
     // Query user metrics
-    const userRows = db.prepare(`
-      SELECT
-        p.user_id as userId,
-        p.user_name as userName,
-        COUNT(DISTINCT p.session_id) as totalSessions,
-        p.total_fields_edited as totalFields,
-        p.total_validation_errors as totalValidationErrors,
-        p.ai_drafts_accepted as aiDraftsAccepted,
-        p.ai_drafts_rejected as aiDraftsRejected,
-        AVG(fs.duration_ms) as avgDurationMs,
-        COUNT(fs.id) as totalFieldSessions
-      FROM telemetry_participants p
-      LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
-      WHERE p.joined_at >= ?
-      GROUP BY p.user_id, p.user_name
-      ORDER BY totalFields DESC
-    `).all(startTime) as any[]
-
-    const users: UserMetrics[] = userRows.map((row) => {
-      const avgTimePerField = row.avgDurationMs ? row.avgDurationMs / 1000 : 0
-      const avgFieldsPerSession = row.totalSessions > 0 ? row.totalFields / row.totalSessions : 0
-      const estimatedTimeForFullForm = avgTimePerField * 10 // Assume 10 fields per form
-      const formsPerHour = avgTimePerField > 0 ? 3600 / estimatedTimeForFullForm : 0
-      const accuracy = row.totalFields > 0
-        ? ((row.totalFields - row.totalValidationErrors) / row.totalFields) * 100
-        : 100
-      const totalAiInteractions = row.aiDraftsAccepted + row.aiDraftsRejected
-      const aiAcceptanceRate = totalAiInteractions > 0
-        ? (row.aiDraftsAccepted / totalAiInteractions) * 100
-        : 0
-
-      // Calculate improvement rate (simplified - compare first half vs second half of sessions)
-      const improvementRate = calculateImprovementRate(db, row.userId, startTime)
-
-      return {
-        userId: row.userId,
-        userName: row.userName,
-        totalSessions: row.totalSessions,
-        totalFields: row.totalFields,
-        totalValidationErrors: row.totalValidationErrors,
-        avgFieldsPerSession,
-        avgTimePerField,
-        estimatedTimeForFullForm,
-        formsPerHour,
-        accuracy,
-        aiDraftsAccepted: row.aiDraftsAccepted,
-        aiDraftsRejected: row.aiDraftsRejected,
-        aiAcceptanceRate,
-        improvementRate,
-      }
+    const userResult = await db.execute({
+      sql: `
+        SELECT
+          p.user_id as userId,
+          p.user_name as userName,
+          COUNT(DISTINCT p.session_id) as totalSessions,
+          p.total_fields_edited as totalFields,
+          p.total_validation_errors as totalValidationErrors,
+          p.ai_drafts_accepted as aiDraftsAccepted,
+          p.ai_drafts_rejected as aiDraftsRejected,
+          AVG(fs.duration_ms) as avgDurationMs,
+          COUNT(fs.id) as totalFieldSessions
+        FROM telemetry_participants p
+        LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
+        WHERE p.joined_at >= ?
+        GROUP BY p.user_id, p.user_name
+        ORDER BY totalFields DESC
+      `,
+      args: [startTime],
     })
+    const userRows = userResult.rows as any[]
+
+    const users: UserMetrics[] = await Promise.all(
+      userRows.map(async (row) => {
+        const avgTimePerField = row.avgDurationMs ? Number(row.avgDurationMs) / 1000 : 0
+        const avgFieldsPerSession = Number(row.totalSessions) > 0 ? Number(row.totalFields) / Number(row.totalSessions) : 0
+        const estimatedTimeForFullForm = avgTimePerField * 10 // Assume 10 fields per form
+        const formsPerHour = avgTimePerField > 0 ? 3600 / estimatedTimeForFullForm : 0
+        const accuracy = Number(row.totalFields) > 0
+          ? ((Number(row.totalFields) - Number(row.totalValidationErrors)) / Number(row.totalFields)) * 100
+          : 100
+        const totalAiInteractions = Number(row.aiDraftsAccepted) + Number(row.aiDraftsRejected)
+        const aiAcceptanceRate = totalAiInteractions > 0
+          ? (Number(row.aiDraftsAccepted) / totalAiInteractions) * 100
+          : 0
+
+        // Calculate improvement rate (simplified - compare first half vs second half of sessions)
+        const improvementRate = await calculateImprovementRate(db, String(row.userId), startTime)
+
+        return {
+          userId: String(row.userId),
+          userName: String(row.userName),
+          totalSessions: Number(row.totalSessions),
+          totalFields: Number(row.totalFields),
+          totalValidationErrors: Number(row.totalValidationErrors),
+          avgFieldsPerSession,
+          avgTimePerField,
+          estimatedTimeForFullForm,
+          formsPerHour,
+          accuracy,
+          aiDraftsAccepted: Number(row.aiDraftsAccepted),
+          aiDraftsRejected: Number(row.aiDraftsRejected),
+          aiAcceptanceRate,
+          improvementRate,
+        }
+      })
+    )
 
     // Query collaboration metrics
-    const collabRows = db.prepare(`
-      SELECT
-        s.id as sessionId,
-        s.room_id as roomId,
-        s.route,
-        s.submit_mode as submitMode,
-        s.duration_ms as completionTime,
-        s.outcome,
-        s.total_participants as participantCount,
-        COUNT(DISTINCT fs.field_id) as totalFields,
-        COUNT(DISTINCT ve.field_id) as validationErrors,
-        GROUP_CONCAT(DISTINCT p.user_name) as participants
-      FROM telemetry_sessions s
-      LEFT JOIN telemetry_participants p ON s.id = p.session_id
-      LEFT JOIN telemetry_field_sessions fs ON s.id = fs.session_id
-      LEFT JOIN telemetry_validation_events ve ON s.id = ve.session_id
-      WHERE s.started_at >= ? AND s.total_participants > 1
-      GROUP BY s.id
-      ORDER BY s.started_at DESC
-      LIMIT 20
-    `).all(startTime) as any[]
+    const collabResult = await db.execute({
+      sql: `
+        SELECT
+          s.id as sessionId,
+          s.room_id as roomId,
+          s.route,
+          s.submit_mode as submitMode,
+          s.duration_ms as completionTime,
+          s.outcome,
+          s.total_participants as participantCount,
+          COUNT(DISTINCT fs.field_id) as totalFields,
+          COUNT(DISTINCT ve.field_id) as validationErrors,
+          GROUP_CONCAT(DISTINCT p.user_name) as participants
+        FROM telemetry_sessions s
+        LEFT JOIN telemetry_participants p ON s.id = p.session_id
+        LEFT JOIN telemetry_field_sessions fs ON s.id = fs.session_id
+        LEFT JOIN telemetry_validation_events ve ON s.id = ve.session_id
+        WHERE s.started_at >= ? AND s.total_participants > 1
+        GROUP BY s.id
+        ORDER BY s.started_at DESC
+        LIMIT 20
+      `,
+      args: [startTime],
+    })
+    const collabRows = collabResult.rows as any[]
 
     const collaborations: CollaborationMetrics[] = collabRows.map((row) => {
-      const participants = row.participants ? row.participants.split(',') : []
-      const avgFieldsPerUser = row.participantCount > 0 ? row.totalFields / row.participantCount : 0
+      const participants = row.participants ? String(row.participants).split(',') : []
+      const avgFieldsPerUser = Number(row.participantCount) > 0 ? Number(row.totalFields) / Number(row.participantCount) : 0
 
       return {
-        sessionId: row.sessionId,
-        roomId: row.roomId,
-        route: row.route,
+        sessionId: String(row.sessionId),
+        roomId: String(row.roomId),
+        route: String(row.route),
         participants,
-        participantCount: row.participantCount,
-        submitMode: row.submitMode,
-        totalFields: row.totalFields,
+        participantCount: Number(row.participantCount),
+        submitMode: String(row.submitMode),
+        totalFields: Number(row.totalFields),
         avgFieldsPerUser,
-        completionTime: row.completionTime || 0,
-        validationErrors: row.validationErrors,
-        outcome: row.outcome || 'in progress',
+        completionTime: Number(row.completionTime) || 0,
+        validationErrors: Number(row.validationErrors),
+        outcome: String(row.outcome || 'in progress'),
       }
     })
 
     // Query field preferences (fields most commonly filled during collaboration)
-    const fieldRows = db.prepare(`
-      SELECT
-        fs.field_id as fieldId,
-        fs.field_label as fieldLabel,
-        COUNT(*) as totalCompletions,
-        AVG(fs.duration_ms) / 1000.0 as avgCompletionTime
-      FROM telemetry_field_sessions fs
-      JOIN telemetry_sessions s ON fs.session_id = s.id
-      WHERE fs.focused_at >= ? AND s.total_participants > 1 AND fs.was_completed = 1
-      GROUP BY fs.field_id, fs.field_label
-      ORDER BY totalCompletions DESC
-      LIMIT 20
-    `).all(startTime) as any[]
+    const fieldResult = await db.execute({
+      sql: `
+        SELECT
+          fs.field_id as fieldId,
+          fs.field_label as fieldLabel,
+          COUNT(*) as totalCompletions,
+          AVG(fs.duration_ms) / 1000.0 as avgCompletionTime
+        FROM telemetry_field_sessions fs
+        JOIN telemetry_sessions s ON fs.session_id = s.id
+        WHERE fs.focused_at >= ? AND s.total_participants > 1 AND fs.was_completed = 1
+        GROUP BY fs.field_id, fs.field_label
+        ORDER BY totalCompletions DESC
+        LIMIT 20
+      `,
+      args: [startTime],
+    })
+    const fieldRows = fieldResult.rows as any[]
 
     const fieldPreferences: FieldPreference[] = fieldRows.map((row, idx) => ({
-      fieldId: row.fieldId,
-      fieldLabel: row.fieldLabel || row.fieldId,
-      totalCompletions: row.totalCompletions,
-      avgCompletionTime: row.avgCompletionTime || 0,
+      fieldId: String(row.fieldId),
+      fieldLabel: String(row.fieldLabel || row.fieldId),
+      totalCompletions: Number(row.totalCompletions),
+      avgCompletionTime: Number(row.avgCompletionTime) || 0,
       popularityRank: idx + 1,
     }))
 
     // Query time series data for learning curves
-    const timeSeriesRows = db.prepare(`
-      SELECT
-        p.user_id as userId,
-        DATE(p.joined_at / 1000, 'unixepoch') as date,
-        COUNT(DISTINCT fs.field_id) as fieldsCompleted,
-        SUM(fs.had_validation_error) as validationErrors,
-        SUM(fs.ai_draft_accepted) as aiAccepted,
-        COUNT(*) as totalInteractions
-      FROM telemetry_participants p
-      LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
-      WHERE p.joined_at >= ?
-      GROUP BY p.user_id, date
-      ORDER BY date ASC
-    `).all(startTime) as any[]
+    const timeSeriesResult = await db.execute({
+      sql: `
+        SELECT
+          p.user_id as userId,
+          DATE(p.joined_at / 1000, 'unixepoch') as date,
+          COUNT(DISTINCT fs.field_id) as fieldsCompleted,
+          SUM(fs.had_validation_error) as validationErrors,
+          SUM(fs.ai_draft_accepted) as aiAccepted,
+          COUNT(*) as totalInteractions
+        FROM telemetry_participants p
+        LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
+        WHERE p.joined_at >= ?
+        GROUP BY p.user_id, date
+        ORDER BY date ASC
+      `,
+      args: [startTime],
+    })
+    const timeSeriesRows = timeSeriesResult.rows as any[]
 
     const timeSeriesData: TimeSeriesPoint[] = timeSeriesRows.map((row) => ({
-      date: row.date,
-      userId: row.userId,
-      fieldsCompleted: row.fieldsCompleted,
-      validationErrors: row.validationErrors,
-      aiAcceptance: row.totalInteractions > 0 ? (row.aiAccepted / row.totalInteractions) * 100 : 0,
+      date: String(row.date),
+      userId: String(row.userId),
+      fieldsCompleted: Number(row.fieldsCompleted),
+      validationErrors: Number(row.validationErrors),
+      aiAcceptance: Number(row.totalInteractions) > 0 ? (Number(row.aiAccepted) / Number(row.totalInteractions)) * 100 : 0,
     }))
 
     return {
@@ -225,27 +245,36 @@ export const getAnalytics = createServerFn('GET', async (options: { timeRange: '
       fieldPreferences,
       timeSeriesData,
     } as AnalyticsData
-  } finally {
-    db.close()
+  } catch (error) {
+    console.error('[Analytics] Error:', error)
+    throw new Error('Failed to fetch analytics data')
   }
 })
 
 /**
  * Calculate improvement rate by comparing first half vs second half of sessions
  */
-function calculateImprovementRate(db: Database.Database, userId: string, startTime: number): number {
-  const sessions = db.prepare(`
-    SELECT
-      p.joined_at,
-      AVG(fs.duration_ms) as avgDuration,
-      COUNT(fs.had_validation_error) as errors,
-      COUNT(*) as fields
-    FROM telemetry_participants p
-    LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
-    WHERE p.user_id = ? AND p.joined_at >= ?
-    GROUP BY p.session_id
-    ORDER BY p.joined_at ASC
-  `).all(userId, startTime) as any[]
+async function calculateImprovementRate(
+  db: ReturnType<typeof createClient>,
+  userId: string,
+  startTime: number
+): Promise<number> {
+  const result = await db.execute({
+    sql: `
+      SELECT
+        p.joined_at,
+        AVG(fs.duration_ms) as avgDuration,
+        COUNT(fs.had_validation_error) as errors,
+        COUNT(*) as fields
+      FROM telemetry_participants p
+      LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
+      WHERE p.user_id = ? AND p.joined_at >= ?
+      GROUP BY p.session_id
+      ORDER BY p.joined_at ASC
+    `,
+    args: [userId, startTime],
+  })
+  const sessions = result.rows as any[]
 
   if (sessions.length < 2) return 0
 
@@ -253,8 +282,8 @@ function calculateImprovementRate(db: Database.Database, userId: string, startTi
   const firstHalf = sessions.slice(0, midpoint)
   const secondHalf = sessions.slice(midpoint)
 
-  const firstHalfAvgSpeed = firstHalf.reduce((sum, s) => sum + (s.avgDuration || 0), 0) / firstHalf.length
-  const secondHalfAvgSpeed = secondHalf.reduce((sum, s) => sum + (s.avgDuration || 0), 0) / secondHalf.length
+  const firstHalfAvgSpeed = firstHalf.reduce((sum, s) => sum + (Number(s.avgDuration) || 0), 0) / firstHalf.length
+  const secondHalfAvgSpeed = secondHalf.reduce((sum, s) => sum + (Number(s.avgDuration) || 0), 0) / secondHalf.length
 
   if (firstHalfAvgSpeed === 0) return 0
 
