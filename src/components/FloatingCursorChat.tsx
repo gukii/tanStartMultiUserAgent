@@ -25,7 +25,7 @@ export function FloatingCursorChat({
   position = 'bottom-right',
   onSettingsClick,
 }: FloatingCursorChatProps) {
-  const { cursorMessage, setCursorMessage, touchCursorMode, setTouchCursorMode, submitMode } = useCollaboration()
+  const { cursorMessage, setCursorMessage, touchCursorMode, setTouchCursorMode, submitMode, connected } = useCollaboration()
   const [localMessage, setLocalMessage] = useState(cursorMessage)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -98,7 +98,11 @@ export function FloatingCursorChat({
 
   return (
     <div
-      className={`fixed ${positionClasses} z-40 flex items-center gap-2 rounded-lg border border-violet-400 bg-violet-600 p-2 shadow-lg backdrop-blur-sm transition-all`}
+      className={`fixed ${positionClasses} z-40 flex items-center gap-2 rounded-lg border p-2 shadow-lg backdrop-blur-sm transition-all ${
+        connected
+          ? 'border-violet-400 bg-violet-600'
+          : 'border-gray-500 bg-gray-600'
+      }`}
     >
       {/* Touch cursor toggle with crosshair icon - only show on touch devices */}
       {isTouchDevice && (
@@ -137,9 +141,10 @@ export function FloatingCursorChat({
         onChange={(e) => setLocalMessage(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={commitMessage}
-        placeholder="Cursor chat... (⌘K)"
-        className="w-32 rounded border border-violet-400 bg-white px-2 py-1 text-xs text-gray-900 placeholder:text-gray-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-300 transition sm:w-40"
-        title="Type a message to show next to your cursor. Shortcut: Cmd/Ctrl + K. Press Enter to send, Esc to cancel."
+        placeholder={connected ? "Cursor chat... (⌘K)" : "offline"}
+        disabled={!connected}
+        className="w-32 rounded border border-violet-400 bg-white px-2 py-1 text-xs text-gray-900 placeholder:text-gray-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-300 transition sm:w-40 disabled:bg-gray-100 disabled:cursor-not-allowed"
+        title={connected ? "Type a message to show next to your cursor. Shortcut: Cmd/Ctrl + K. Press Enter to send, Esc to cancel." : "Offline - reconnecting..."}
       />
 
       {/* Settings gear button */}
