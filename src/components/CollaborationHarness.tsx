@@ -901,18 +901,16 @@ export function CollaborationHarness({
         message: target.validationMessage,
       })
 
-      // Find the submit button for positioning (only once)
-      if (!foundSubmitButton) {
-        const form = (target as HTMLElement).closest('form')
-        if (form) {
-          // Look for submit button - try multiple selectors
-          // Strategy: Find the last button in the form (usually the main action button)
-          const submitBtn = form.querySelector('button[type="submit"]') as HTMLElement
-          const allButtons = Array.from(form.querySelectorAll('button')) as HTMLElement[]
-          const lastButton = allButtons[allButtons.length - 1]
+      // Find the submit button for positioning (always search fresh in case mode changed)
+      const form = (target as HTMLElement).closest('form')
+      if (form && !foundSubmitButton) {
+        // Look for submit button - try multiple selectors
+        // Strategy: Find the last button in the form (usually the main action button)
+        const submitBtn = form.querySelector('button[type="submit"]') as HTMLElement
+        const allButtons = Array.from(form.querySelectorAll('button')) as HTMLElement[]
+        const lastButton = allButtons[allButtons.length - 1]
 
-          foundSubmitButton = submitBtn || lastButton || form.querySelector('input[type="submit"]') as HTMLElement
-        }
+        foundSubmitButton = submitBtn || lastButton || form.querySelector('input[type="submit"]') as HTMLElement
       }
 
       // Clear any pending update
@@ -967,7 +965,13 @@ export function CollaborationHarness({
       container.removeEventListener('submit', onSubmit)
       container.removeEventListener('input', onInput, true)
     }
-  }, [disabled, userId]) // Re-run when userId changes (containerRef becomes available)
+  }, [disabled, userId, currentSubmitMode]) // Re-run when submit mode changes (button changes)
+
+  // Clear validation errors when submit mode changes (button changes)
+  useEffect(() => {
+    setValidationErrors([])
+    setSubmitButtonElement(null)
+  }, [currentSubmitMode])
 
   // ------------------------------------------------------------------
   // Re-broadcast cursor when tab becomes visible (fixes throttling)
