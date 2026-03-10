@@ -59,11 +59,31 @@ export function SubmitControl({
   const handleMarkReady = () => {
     // Find the form and validate it before marking ready
     const form = document.querySelector('form')
-    if (form && !form.checkValidity()) {
-      // Form is invalid - trigger validation UI
-      form.reportValidity()
+    if (!form) {
+      markReady()
       return
     }
+
+    // Check if form is valid
+    const isValid = form.checkValidity()
+
+    if (!isValid) {
+      // Form is invalid - manually trigger invalid events so CollaborationHarness can show errors
+      const formElements = form.querySelectorAll('input, textarea, select')
+      formElements.forEach((element) => {
+        if (element instanceof HTMLInputElement ||
+            element instanceof HTMLTextAreaElement ||
+            element instanceof HTMLSelectElement) {
+          if (!element.validity.valid) {
+            // Dispatch invalid event that CollaborationHarness will catch
+            const invalidEvent = new Event('invalid', { bubbles: false, cancelable: true })
+            element.dispatchEvent(invalidEvent)
+          }
+        }
+      })
+      return
+    }
+
     // Form is valid, mark as ready
     markReady()
   }
@@ -80,7 +100,19 @@ export function SubmitControl({
           // Form is invalid - this shouldn't happen if everyone validated before marking ready
           // but we check anyway as a safety measure
           console.warn('[SubmitControl] Form validation failed during auto-submit')
-          form.reportValidity()
+
+          // Manually trigger invalid events for CollaborationHarness
+          const formElements = form.querySelectorAll('input, textarea, select')
+          formElements.forEach((element) => {
+            if (element instanceof HTMLInputElement ||
+                element instanceof HTMLTextAreaElement ||
+                element instanceof HTMLSelectElement) {
+              if (!element.validity.valid) {
+                const invalidEvent = new Event('invalid', { bubbles: false, cancelable: true })
+                element.dispatchEvent(invalidEvent)
+              }
+            }
+          })
           return
         }
 

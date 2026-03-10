@@ -137,20 +137,19 @@ function CheckoutForm({
       className="grid gap-4 sm:gap-6"
       onSubmit={(e) => {
         e.preventDefault()
-
-        // Check if form is valid
         const form = e.currentTarget
+
+        // Note: By the time onSubmit fires, the browser has already run validation
+        // and fired 'invalid' events if needed. So we just need to check if it's valid.
         if (!form.checkValidity()) {
-          // Trigger validation UI
-          form.reportValidity()
+          // Form is invalid - validation events have already fired
+          // Just return to prevent submission
           return
         }
 
-        // Broadcast form submission to all peers
+        // Form is valid - proceed with submission
         sendFormSubmit()
-        // Set local submitted state
         setSubmitted(true)
-        // Track that we submitted it
         setSubmittedBy(userId)
       }}
     >
