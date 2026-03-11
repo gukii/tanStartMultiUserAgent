@@ -89,16 +89,17 @@ export const getAnalytics = createServerFn('GET', async (options: { timeRange: '
           p.user_id as userId,
           p.user_name as userName,
           COUNT(DISTINCT p.session_id) as totalSessions,
-          p.total_fields_edited as totalFields,
-          p.total_validation_errors as totalValidationErrors,
-          p.ai_drafts_accepted as aiDraftsAccepted,
-          p.ai_drafts_rejected as aiDraftsRejected,
+          COUNT(DISTINCT fs.field_id) as totalFields,
+          SUM(CASE WHEN fs.had_validation_error = 1 THEN 1 ELSE 0 END) as totalValidationErrors,
+          SUM(CASE WHEN fs.ai_draft_accepted = 1 THEN 1 ELSE 0 END) as aiDraftsAccepted,
+          SUM(CASE WHEN fs.ai_draft_rejected = 1 THEN 1 ELSE 0 END) as aiDraftsRejected,
           AVG(fs.duration_ms) as avgDurationMs,
           COUNT(fs.id) as totalFieldSessions
         FROM telemetry_participants p
         LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
         WHERE p.joined_at >= ?
         GROUP BY p.user_id, p.user_name
+        HAVING totalFields > 0
         ORDER BY totalFields DESC
       `,
       args: [startTime],
