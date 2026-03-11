@@ -31,6 +31,7 @@ import { TelemetryEventCapture } from './TelemetryEventCapture';
 import { useTelemetryBuffer } from '../lib/telemetry-client';
 import type { CollaborationHarnessProps } from '../types/collaboration';
 import type { TelemetryConfig } from '../types/telemetry';
+import { faker } from '@faker-js/faker';
 
 export interface CollaborationHarnessWithTelemetryProps extends CollaborationHarnessProps {
   /**
@@ -50,11 +51,23 @@ export function CollaborationHarnessWithTelemetry({
   // Generate unique session ID
   const sessionId = useId();
 
+  // Generate a readable default name using faker if none provided
+  const defaultUserName = useMemo(() => {
+    if (harnessProps.userName) return harnessProps.userName;
+    // Check localStorage for saved name
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('userName');
+      if (saved) return saved;
+    }
+    // Generate a readable name
+    return faker.person.firstName();
+  }, [harnessProps.userName]);
+
   // User ID from props (or generate one)
   const userId = useMemo(() => {
     // Try to derive from userName, or generate random ID
-    return harnessProps.userName || `user_${Math.random().toString(36).substring(7)}`;
-  }, [harnessProps.userName]);
+    return defaultUserName || `user_${Math.random().toString(36).substring(7)}`;
+  }, [defaultUserName]);
 
   // Reference to WebSocket (will be populated by CollaborationHarness)
   const socketRef = useRef<WebSocket | null>(null);
@@ -107,12 +120,16 @@ export function CollaborationHarnessWithTelemetry({
 
   // If telemetry is disabled, just render the basic harness
   if (!config.enabled) {
-    return <CollaborationHarness {...harnessProps}>{children}</CollaborationHarness>;
+    return (
+      <CollaborationHarness {...harnessProps} userName={defaultUserName}>
+        {children}
+      </CollaborationHarness>
+    );
   }
 
   // Render with telemetry
   return (
-    <CollaborationHarness {...harnessProps}>
+    <CollaborationHarness {...harnessProps} userName={defaultUserName}>
       <TelemetryProvider client={telemetryClient} config={config}>
         <TelemetryEventCapture>{children}</TelemetryEventCapture>
       </TelemetryProvider>
