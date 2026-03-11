@@ -33,6 +33,8 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwindcss": "^4.1.18",
+    "tsx": "^4.21.0",
+    "vite": "^7.1.7",
     "vite-tsconfig-paths": "^5.1.4",
     "ws": "^8.19.0"
   },
@@ -52,8 +54,6 @@
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.9",
-    "tsx": "^4.21.0",
-    "typescript": "^5.7.2",
-    "vite": "^7.1.7"
+    "typescript": "^5.7.2"
   }
 }
