@@ -49,6 +49,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 const CURSOR_THROTTLE_MS = 50
+const MAX_RECONNECT_DELAY = 30000 // Max 30 seconds between reconnection attempts
+const INITIAL_RECONNECT_DELAY = 1000 // Start at 1 second
 
 const PALETTE = [
   '#ef4444', '#f97316', '#eab308', '#22c55e',
@@ -349,6 +351,10 @@ export function CollaborationHarness({
   // CRDT-lite: track local write timestamps per field so we can ignore
   // stale remote updates that arrive after a local edit.
   const fieldTimestamps = useRef<Record<string, number>>({})
+
+  // Track reconnection attempts for exponential backoff
+  const reconnectAttempts = useRef(0)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const [connected, setConnected] = useState(false)
   const [remoteCursors, setRemoteCursors] = useState<Record<string, CursorState>>({})
@@ -709,10 +715,16 @@ export function CollaborationHarness({
   )
 
   // ------------------------------------------------------------------
-  // WebSocket lifecycle
+  // WebSocket lifecycle with exponential backoff
   // ------------------------------------------------------------------
   useEffect(() => {
     if (disabled || !userId) return // Wait for userId to be generated
+
+    // Clear any pending reconnection timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
 
     // Build WebSocket URL for self-hosted server
     // Uses /parties/main/:roomId path
@@ -731,47 +743,87 @@ export function CollaborationHarness({
     console.log('[CollaborationHarness] Final host:', host)
     console.log('[CollaborationHarness] Connecting to:', wsUrl)
 
-    const socket = new WebSocket(wsUrl)
-    socket.addEventListener('error', (error) => {
-      console.error('[CollaborationHarness] WebSocket error:', error)
-      console.error('[CollaborationHarness] Error event details:', {
-        type: error.type,
-        target: error.target,
-      })
-    })
-    socketRef.current = socket
+    // Calculate delay for this connection attempt
+    const delay = reconnectAttempts.current > 0
+      ? Math.min(
+          INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts.current - 1),
+          MAX_RECONNECT_DELAY
+        )
+      : 0
 
-    // Expose socket globally for telemetry wrapper
-    if (typeof window !== 'undefined') {
-      (window as any).__collabSocket__ = socket
+    if (delay > 0) {
+      console.log(`[CollaborationHarness] Waiting ${delay}ms before reconnection attempt #${reconnectAttempts.current}...`)
     }
 
-    socket.addEventListener('open', () => {
-      console.log('[CollaborationHarness] ✓ WebSocket connected')
-      setConnected(true)
-      send({ type: 'IDENTIFY', userId, name, color })
-    })
-    socket.addEventListener('message', handleMessage)
-    socket.addEventListener('close', (event) => {
-      console.log('[CollaborationHarness] ✗ WebSocket closed', {
-        code: event.code,
-        reason: event.reason,
-        wasClean: event.wasClean,
+    // Delay connection if needed (exponential backoff)
+    reconnectTimeoutRef.current = setTimeout(() => {
+      reconnectTimeoutRef.current = null
+      const socket = new WebSocket(wsUrl)
+      socket.addEventListener('error', (error) => {
+        console.error('[CollaborationHarness] WebSocket error:', error)
+        console.error('[CollaborationHarness] Error event details:', {
+          type: error.type,
+          target: error.target,
+        })
       })
-      setConnected(false)
-    })
+      socketRef.current = socket
 
-    // Keepalive ping every 30 seconds to prevent Railway from closing connection
-    const pingInterval = setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'PING' }))
+      // Expose socket globally for telemetry wrapper
+      if (typeof window !== 'undefined') {
+        (window as any).__collabSocket__ = socket
       }
-    }, 30000)
 
+      socket.addEventListener('open', () => {
+        console.log('[CollaborationHarness] ✓ WebSocket connected')
+        // Reset reconnection attempts on successful connection
+        reconnectAttempts.current = 0
+        setConnected(true)
+        send({ type: 'IDENTIFY', userId, name, color })
+      })
+      socket.addEventListener('message', handleMessage)
+      socket.addEventListener('close', (event) => {
+        console.log('[CollaborationHarness] ✗ WebSocket closed', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        })
+        setConnected(false)
+
+        // Increment reconnection attempts for exponential backoff
+        reconnectAttempts.current += 1
+        console.log(`[CollaborationHarness] Connection closed. Next attempt will use ${reconnectAttempts.current} backoff multiplier`)
+      })
+
+      // Keepalive ping every 30 seconds to prevent Railway from closing connection
+      const pingInterval = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'PING' }))
+        }
+      }, 30000)
+
+      return () => {
+        clearInterval(pingInterval)
+        socket.close()
+        socketRef.current = null
+        if (typeof window !== 'undefined') {
+          (window as any).__collabSocket__ = null
+        }
+        setConnected(false)
+      }
+    }, delay)
+
+    // Cleanup function
     return () => {
-      clearInterval(pingInterval)
-      socket.close()
-      socketRef.current = null
+      // Clear any pending reconnection timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+      // Close socket if it exists
+      if (socketRef.current) {
+        socketRef.current.close()
+        socketRef.current = null
+      }
       if (typeof window !== 'undefined') {
         (window as any).__collabSocket__ = null
       }
