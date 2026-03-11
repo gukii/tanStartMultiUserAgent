@@ -17,6 +17,7 @@ import { SubmitControl } from '../components/SubmitControl'
 import { UserSettingsPanel } from '../components/UserSettingsPanel'
 import { FloatingCursorChat, type FloatingChatPosition } from '../components/FloatingCursorChat'
 import { getNormalBehavior } from '../lib/normalBehavior.server'
+import { faker } from '@faker-js/faker'
 
 export const Route = createFileRoute('/demo-telemetry')({
   component: DemoTelemetryPage,
@@ -371,6 +372,49 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
     ws.onerror = () => setStatus('WebSocket error – is server running?')
   }
 
+  function fillAllFields() {
+    // Generate realistic faker data for all fields
+    const expiryMonth = faker.string.numeric(2)
+    const expiryYear = faker.string.numeric(2)
+    const countries = ['US', 'DE', 'GB', 'FR', 'AU']
+
+    const formData = {
+      firstName: faker.person.firstName(),
+      lastName: faker.person.lastName(),
+      email: faker.internet.email(),
+      cardNumber: faker.finance.creditCardNumber('#### #### #### ####'),
+      expiry: `${expiryMonth}/${expiryYear}`,
+      cvv: faker.string.numeric(3),
+      address: faker.location.streetAddress(),
+      city: faker.location.city(),
+      country: faker.helpers.arrayElement(countries),
+      notes: faker.lorem.sentence(),
+    }
+
+    // Connect as AI Agent and send UPDATE_FIELD for each field
+    const host = partyKitHost ?? window.location.host
+    const wsProto = host.startsWith('localhost') || host.startsWith('127.')
+      ? 'ws'
+      : 'wss'
+    const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(roomId)}?userId=ai-agent&name=AI%20Agent&color=%238b5cf6`
+    const ws = new WebSocket(url)
+
+    ws.onopen = () => {
+      // Send UPDATE_FIELD for each field
+      Object.entries(formData).forEach(([fieldId, value]) => {
+        ws.send(JSON.stringify({
+          type: 'UPDATE_FIELD',
+          fieldId,
+          value,
+          timestamp: Date.now(),
+        }))
+      })
+      setTimeout(() => ws.close(), 500)
+      setStatus('✓ All fields filled with AI Agent data')
+    }
+    ws.onerror = () => setStatus('WebSocket error – is server running?')
+  }
+
   return (
     <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50 p-4 sm:p-5">
       <h2 className="mb-2 text-sm font-semibold text-violet-900 sm:mb-3 sm:text-base">🤖 AI Agent simulator</h2>
@@ -380,6 +424,16 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
       </p>
 
       <div className="mb-3 flex flex-wrap gap-2">
+        <button
+          onClick={fillAllFields}
+          onTouchEnd={(e) => {
+            e.preventDefault()
+            fillAllFields()
+          }}
+          className="rounded bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 active:bg-emerald-800 touch-manipulation"
+        >
+          🤖 Fill All Fields (AI Agent)
+        </button>
         <button
           onClick={() => sendDraft('firstName', 'Alice', 'Common test first name')}
           onTouchEnd={(e) => {

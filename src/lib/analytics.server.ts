@@ -92,7 +92,7 @@ export const getAnalytics = createServerFn('GET', async (options: { timeRange: '
           COUNT(DISTINCT fs.field_id) as totalFields,
           SUM(CASE WHEN fs.had_validation_error = 1 THEN 1 ELSE 0 END) as totalValidationErrors,
           SUM(CASE WHEN fs.ai_draft_accepted = 1 THEN 1 ELSE 0 END) as aiDraftsAccepted,
-          SUM(CASE WHEN fs.ai_draft_rejected = 1 THEN 1 ELSE 0 END) as aiDraftsRejected,
+          SUM(CASE WHEN fs.ai_draft_offered = 1 AND fs.ai_draft_accepted = 0 THEN 1 ELSE 0 END) as aiDraftsRejected,
           AVG(fs.duration_ms) as avgDurationMs,
           COUNT(fs.id) as totalFieldSessions
         FROM telemetry_participants p

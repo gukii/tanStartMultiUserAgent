@@ -17,6 +17,7 @@
   },
   "packageManager": "pnpm@9.0.0",
   "dependencies": {
+    "@faker-js/faker": "^10.3.0",
     "@libsql/client": "^0.17.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-router": "^1.132.0",
