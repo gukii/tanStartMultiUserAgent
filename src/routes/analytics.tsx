@@ -189,7 +189,7 @@ function AnalyticsPage() {
               <option value="">All Users</option>
               {(data.users || []).map((user) => (
                 <option key={user.userId} value={user.userId}>
-                  {user.userName}
+                  {user.userName} ({user.userId})
                 </option>
               ))}
             </select>
@@ -212,7 +212,10 @@ function AnalyticsPage() {
               <tbody>
                 {filteredUsers.map((user) => (
                   <tr key={user.userId} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{user.userName}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900">{user.userName}</div>
+                      <div className="text-xs text-gray-500">{user.userId}</div>
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{user.totalSessions}</td>
                     <td className="px-4 py-3 text-gray-600">{user.totalFields}</td>
                     <td className="px-4 py-3 text-gray-600">{user.avgTimePerField.toFixed(1)}s</td>

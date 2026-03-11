@@ -30,6 +30,7 @@ import {
 import { createPortal } from 'react-dom'
 // import PartySocket from 'partysocket' // Removed: using native WebSocket for self-hosted server
 import { nanoid } from 'nanoid'
+import { faker } from '@faker-js/faker'
 import { useMultiplayerMap } from '../hooks/useMultiplayerMap'
 import { GhostCursor } from './GhostCursor'
 import { AISuggestionBubble } from './AISuggestionBubble'
@@ -61,12 +62,8 @@ function randomColor() {
   return PALETTE[Math.floor(Math.random() * PALETTE.length)]
 }
 
-const ADJECTIVES = ['Quick', 'Bright', 'Calm', 'Bold', 'Swift', 'Keen', 'Sage']
-const NOUNS = ['Fox', 'Bear', 'Hawk', 'Wolf', 'Owl', 'Lynx', 'Deer']
 function randomName() {
-  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)]
-  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)]
-  return `${adj} ${noun}`
+  return faker.person.firstName()
 }
 
 /**
