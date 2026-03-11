@@ -687,6 +687,10 @@ export function CollaborationHarness({
           setRemoteFieldValues({})
           setDrafts({})
           setReadyStates({})
+          setFieldLocks({})
+
+          // Clear local field timestamps to prevent stale update rejection
+          fieldTimestamps.current = {}
 
           // Clear all DOM fields
           const formElements = document.querySelectorAll('form input, form textarea, form select')
@@ -1563,6 +1567,11 @@ export function CollaborationHarness({
     const lastActivityBroadcast: Record<string, number> = {}
 
     function onInput(e: Event) {
+      // Ignore remote-originated events (from CollaborationHarness applying remote updates)
+      if ((e as Event & { __remoteOrigin?: boolean }).__remoteOrigin) {
+        return
+      }
+
       const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
       if (!('value' in target)) return
       // Prefer 'name' over 'id' since React's useId() generates instance-specific IDs
