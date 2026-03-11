@@ -278,8 +278,15 @@ function setNativeInputValue(
       : window.HTMLInputElement.prototype
   const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
   setter?.call(el, value)
-  el.dispatchEvent(new Event('input', { bubbles: true }))
-  el.dispatchEvent(new Event('change', { bubbles: true }))
+
+  // Mark events as remote-originated so telemetry can ignore them
+  const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+  const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+  inputEvent.__remoteOrigin = true
+  changeEvent.__remoteOrigin = true
+
+  el.dispatchEvent(inputEvent)
+  el.dispatchEvent(changeEvent)
 }
 
 // ---------------------------------------------------------------------------
@@ -418,7 +425,9 @@ export function CollaborationHarness({
 
     if (el instanceof HTMLSelectElement) {
       el.value = value
-      el.dispatchEvent(new Event('change', { bubbles: true }))
+      const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+      changeEvent.__remoteOrigin = true
+      el.dispatchEvent(changeEvent)
     } else {
       setNativeInputValue(el, value)
     }
@@ -688,15 +697,25 @@ export function CollaborationHarness({
               } else {
                 element.value = ''
               }
-              element.dispatchEvent(new Event('input', { bubbles: true }))
-              element.dispatchEvent(new Event('change', { bubbles: true }))
+              const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+              const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+              inputEvent.__remoteOrigin = true
+              changeEvent.__remoteOrigin = true
+              element.dispatchEvent(inputEvent)
+              element.dispatchEvent(changeEvent)
             } else if (element instanceof HTMLTextAreaElement) {
               element.value = ''
-              element.dispatchEvent(new Event('input', { bubbles: true }))
-              element.dispatchEvent(new Event('change', { bubbles: true }))
+              const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+              const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+              inputEvent.__remoteOrigin = true
+              changeEvent.__remoteOrigin = true
+              element.dispatchEvent(inputEvent)
+              element.dispatchEvent(changeEvent)
             } else if (element instanceof HTMLSelectElement) {
               element.selectedIndex = 0
-              element.dispatchEvent(new Event('change', { bubbles: true }))
+              const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+              changeEvent.__remoteOrigin = true
+              element.dispatchEvent(changeEvent)
             }
           })
 

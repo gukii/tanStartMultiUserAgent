@@ -35,6 +35,11 @@ export function TelemetryEventCapture({ children }: TelemetryEventCaptureProps) 
     // Field Input Tracking
     // ========================================================================
     function onInput(e: Event) {
+      // Ignore remote-originated events from CollaborationHarness
+      if ((e as Event & { __remoteOrigin?: boolean }).__remoteOrigin) {
+        return;
+      }
+
       const target = e.target as HTMLInputElement;
       if (!isFormField(target)) return;
 
@@ -120,6 +125,11 @@ export function TelemetryEventCapture({ children }: TelemetryEventCaptureProps) 
     // Change Tracking (for edit count)
     // ========================================================================
     function onChange(e: Event) {
+      // Ignore remote-originated events from CollaborationHarness
+      if ((e as Event & { __remoteOrigin?: boolean }).__remoteOrigin) {
+        return;
+      }
+
       const target = e.target as HTMLInputElement;
       if (!isFormField(target)) return;
 
