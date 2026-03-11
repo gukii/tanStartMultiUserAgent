@@ -492,7 +492,7 @@ async function start() {
     const proxy = createProxyMiddleware({
         target: `http://127.0.0.1:${TANSTACK_PORT}`,
         changeOrigin: true,
-        ws: true, // Enable WebSocket proxying for Vite HMR
+        ws: false, // Disable automatic WebSocket proxying - we handle it manually in server.on('upgrade')
         filter: (pathname) => pathname !== '/health',
         onError: (err, req, res) => {
           console.error('[Proxy] Error:', err.message)
