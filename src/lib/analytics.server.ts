@@ -62,25 +62,44 @@ interface AnalyticsData {
   timeSeriesData: TimeSeriesPoint[]
 }
 
-export const getAnalytics = createServerFn('GET', async (options: { timeRange: '1h' | '24h' | '7d' | '30d' }) => {
-  const dbPath = path.join(process.cwd(), 'data', 'telemetry.db')
-  const db = createClient({
-    url: `file:${dbPath}`,
+export const getAnalytics = createServerFn({ method: 'GET' })
+  .inputValidator((input: unknown): { timeRange: '1h' | '24h' | '7d' | '30d' } => {
+    if (!input || typeof input !== 'object' || !('timeRange' in input)) {
+      return { timeRange: '24h' }
+    }
+    const { timeRange } = input as { timeRange: string }
+    if (!['1h', '24h', '7d', '30d'].includes(timeRange)) {
+      return { timeRange: '24h' }
+    }
+    return { timeRange: timeRange as '1h' | '24h' | '7d' | '30d' }
   })
+  .handler(async (ctx): Promise<AnalyticsData> => {
+    const options = ctx.data
+    const dbPath = path.join(process.cwd(), 'data', 'telemetry.db')
+    const db = createClient({
+      url: `file:${dbPath}`,
+    })
 
-  try {
-    // Calculate time range in milliseconds
-    const now = Date.now()
-    const timeRangeMs = {
-      '1h': 60 * 60 * 1000,
-      '24h': 24 * 60 * 60 * 1000,
-      '7d': 7 * 24 * 60 * 60 * 1000,
-      '30d': 30 * 24 * 60 * 60 * 1000,
-    }[options.timeRange]
-    const startTimeMs = now - timeRangeMs
+    try {
+      // Calculate time range in milliseconds
+      const now = Date.now()
+      const timeRangeMs = {
+        '1h': 60 * 60 * 1000,
+        '24h': 24 * 60 * 60 * 1000,
+        '7d': 7 * 24 * 60 * 60 * 1000,
+        '30d': 30 * 24 * 60 * 60 * 1000,
+      }[options.timeRange]
+      const startTimeMs = now - timeRangeMs
 
-    // Convert to seconds for database comparison (telemetry stores Unix timestamps in seconds)
-    const startTime = Math.floor(startTimeMs / 1000)
+      // Convert to seconds for database comparison (telemetry stores Unix timestamps in seconds)
+      const startTime = Math.floor(startTimeMs / 1000)
+
+      console.log('[Analytics] Query params:', {
+        timeRange: options.timeRange,
+        now,
+        startTime,
+        startTimeDate: new Date(startTime * 1000).toISOString(),
+      })
 
     // Query user metrics
     const userResult = await db.execute({
@@ -105,6 +124,11 @@ export const getAnalytics = createServerFn('GET', async (options: { timeRange: '
       args: [startTime],
     })
     const userRows = userResult.rows as any[]
+
+    console.log('[Analytics] User query returned', userRows.length, 'rows')
+    if (userRows.length > 0) {
+      console.log('[Analytics] First row:', userRows[0])
+    }
 
     const users: UserMetrics[] = await Promise.all(
       userRows.map(async (row) => {
@@ -243,17 +267,26 @@ export const getAnalytics = createServerFn('GET', async (options: { timeRange: '
       aiAcceptance: Number(row.totalInteractions) > 0 ? (Number(row.aiAccepted) / Number(row.totalInteractions)) * 100 : 0,
     }))
 
-    return {
+    const result = {
       users,
       collaborations,
       fieldPreferences,
       timeSeriesData,
     } as AnalyticsData
-  } catch (error) {
-    console.error('[Analytics] Error:', error)
-    throw new Error('Failed to fetch analytics data')
-  }
-})
+
+    console.log('[Analytics] Returning data:', {
+      userCount: users.length,
+      collabCount: collaborations.length,
+      fieldPrefCount: fieldPreferences.length,
+      timeSeriesCount: timeSeriesData.length,
+    })
+
+    return result
+    } catch (error) {
+      console.error('[Analytics] Error:', error)
+      throw new Error('Failed to fetch analytics data')
+    }
+  })
 
 /**
  * Calculate improvement rate by comparing first half vs second half of sessions
