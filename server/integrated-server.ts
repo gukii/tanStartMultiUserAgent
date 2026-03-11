@@ -309,6 +309,11 @@ class Room {
         })
         break
       }
+
+      case 'PING':
+        // Respond to keepalive ping to prevent connection timeout
+        this.send(ws, { type: 'PONG' })
+        break
     }
   }
 

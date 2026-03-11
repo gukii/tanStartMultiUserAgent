@@ -734,6 +734,10 @@ export function CollaborationHarness({
     const socket = new WebSocket(wsUrl)
     socket.addEventListener('error', (error) => {
       console.error('[CollaborationHarness] WebSocket error:', error)
+      console.error('[CollaborationHarness] Error event details:', {
+        type: error.type,
+        target: error.target,
+      })
     })
     socketRef.current = socket
 
@@ -743,13 +747,29 @@ export function CollaborationHarness({
     }
 
     socket.addEventListener('open', () => {
+      console.log('[CollaborationHarness] ✓ WebSocket connected')
       setConnected(true)
       send({ type: 'IDENTIFY', userId, name, color })
     })
     socket.addEventListener('message', handleMessage)
-    socket.addEventListener('close', () => setConnected(false))
+    socket.addEventListener('close', (event) => {
+      console.log('[CollaborationHarness] ✗ WebSocket closed', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      })
+      setConnected(false)
+    })
+
+    // Keepalive ping every 30 seconds to prevent Railway from closing connection
+    const pingInterval = setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'PING' }))
+      }
+    }, 30000)
 
     return () => {
+      clearInterval(pingInterval)
       socket.close()
       socketRef.current = null
       if (typeof window !== 'undefined') {
