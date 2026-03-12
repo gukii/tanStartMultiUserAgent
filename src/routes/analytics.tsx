@@ -82,6 +82,7 @@ function AnalyticsPage() {
     async function fetchData() {
       try {
         setLoading(true)
+        console.log('[Analytics] Fetching data for timeRange:', timeRange)
         const result = await getAnalytics({ timeRange })
         console.log('[Analytics] Fetched data:', result)
         setData(result)
@@ -158,7 +159,7 @@ function AnalyticsPage() {
         </div>
 
         {/* Time Range Selector */}
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-6 flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-gray-700">Time range:</span>
           {(['1h', '24h', '7d', '30d'] as const).map((range) => (
             <button
@@ -173,6 +174,9 @@ function AnalyticsPage() {
               {range === '1h' ? 'Last Hour' : range === '24h' ? 'Last 24h' : range === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
             </button>
           ))}
+          <span className="ml-2 text-sm text-gray-500">
+            ({(data.users || []).length} user{(data.users || []).length !== 1 ? 's' : ''}, {collaborations.length} collaboration{collaborations.length !== 1 ? 's' : ''})
+          </span>
         </div>
 
         {/* User Performance Overview */}
