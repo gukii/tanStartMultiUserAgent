@@ -11,7 +11,7 @@
  */
 
 import { telemetryDb, schemaTelemetry } from '../src/db/client';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import type { TelemetryEvent, PiiMode } from '../src/types/telemetry';
 import crypto from 'crypto';
 
@@ -63,6 +63,7 @@ export class TelemetryHandler {
   private queue: Array<{
     roomId: string;
     userId: string;
+    userName?: string;
     events: TelemetryEvent[];
     sequenceId: number;
   }> = [];
@@ -89,9 +90,10 @@ export class TelemetryHandler {
     roomId: string,
     userId: string,
     events: TelemetryEvent[],
-    sequenceId: number
+    sequenceId: number,
+    userName?: string
   ): Promise<void> {
-    console.log(`[Telemetry] ingestBatch called: roomId=${roomId}, userId=${userId}, events=${events.length}, sequence=${sequenceId}`);
+    console.log(`[Telemetry] ingestBatch called: roomId=${roomId}, userId=${userId}, userName=${userName}, events=${events.length}, sequence=${sequenceId}`);
 
     // Check for duplicate sequence
     const key = `${roomId}:${userId}`;
@@ -101,7 +103,7 @@ export class TelemetryHandler {
     }
 
     // Add to queue
-    this.queue.push({ roomId, userId, events, sequenceId });
+    this.queue.push({ roomId, userId, userName, events, sequenceId });
     console.log(`[Telemetry] Added to queue. Queue size: ${this.queue.length}`);
 
     // Mark sequence as processed
@@ -146,7 +148,7 @@ export class TelemetryHandler {
       console.log(`[Telemetry] Flushing ${batch.length} batches...`);
 
       for (const item of batch) {
-        await this.processBatch(item.roomId, item.userId, item.events);
+        await this.processBatch(item.roomId, item.userId, item.userName, item.events);
       }
 
       console.log(`[Telemetry] Flush complete`);
@@ -161,10 +163,10 @@ export class TelemetryHandler {
   /**
    * Process a single batch of events
    */
-  private async processBatch(roomId: string, userId: string, events: TelemetryEvent[]): Promise<void> {
+  private async processBatch(roomId: string, userId: string, userName: string | undefined, events: TelemetryEvent[]): Promise<void> {
     // Ensure session and participant exist
     const sessionId = await this.ensureSession(roomId);
-    const participantId = await this.ensureParticipant(sessionId, userId);
+    const participantId = await this.ensureParticipant(sessionId, userId, userName);
 
     // Process events
     for (const event of events) {
@@ -212,7 +214,7 @@ export class TelemetryHandler {
   /**
    * Ensure participant exists
    */
-  private async ensureParticipant(sessionId: string, userId: string): Promise<number> {
+  private async ensureParticipant(sessionId: string, userId: string, userName?: string): Promise<number> {
     const cacheKey = `${sessionId}:${userId}`;
 
     // Check cache
@@ -239,7 +241,7 @@ export class TelemetryHandler {
       .values({
         sessionId,
         userId,
-        userName: userId, // Will be updated later
+        userName: userName || userId, // Use provided userName or fall back to userId
         joinedAt: new Date(),
         totalInteractions: 0,
         totalKeystrokes: 0,
@@ -249,6 +251,14 @@ export class TelemetryHandler {
         aiDraftsRejected: 0,
       })
       .returning();
+
+    // Increment session participant count
+    await telemetryDb
+      .update(telemetrySessions)
+      .set({
+        totalParticipants: sql`${telemetrySessions.totalParticipants} + 1`,
+      })
+      .where(eq(telemetrySessions.id, sessionId));
 
     this.participantCache.set(cacheKey, newParticipant.id);
     return newParticipant.id;

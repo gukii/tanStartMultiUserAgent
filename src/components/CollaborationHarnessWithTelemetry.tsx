@@ -63,11 +63,19 @@ export function CollaborationHarnessWithTelemetry({
     return faker.person.firstName();
   }, [harnessProps.userName]);
 
-  // User ID from props (or generate one)
+  // User ID from props (or generate a stable unique ID)
   const userId = useMemo(() => {
-    // Try to derive from userName, or generate random ID
-    return defaultUserName || `user_${Math.random().toString(36).substring(7)}`;
-  }, [defaultUserName]);
+    // Check localStorage for saved userId
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('userId');
+      if (saved) return saved;
+      // Generate and save a new ID
+      const newId = `user_${Math.random().toString(36).substring(2, 11)}`;
+      localStorage.setItem('userId', newId);
+      return newId;
+    }
+    return `user_${Math.random().toString(36).substring(2, 11)}`;
+  }, []);
 
   // Reference to WebSocket (will be populated by CollaborationHarness)
   const socketRef = useRef<WebSocket | null>(null);
@@ -89,6 +97,7 @@ export function CollaborationHarnessWithTelemetry({
   const telemetryClient = useTelemetryBuffer({
     sessionId,
     userId,
+    userName: defaultUserName,
     socketRef,
     ...config,
   });

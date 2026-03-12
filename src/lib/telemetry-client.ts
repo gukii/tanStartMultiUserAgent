@@ -21,6 +21,7 @@ import type {
 export interface TelemetryClientOptions extends TelemetryConfig {
   sessionId: string;
   userId: string;
+  userName?: string;
   socketRef: RefObject<WebSocket | null>;
 }
 
@@ -74,6 +75,7 @@ export function useTelemetryBuffer(options: TelemetryClientOptions): TelemetryCl
   const {
     sessionId,
     userId,
+    userName,
     socketRef,
     enabled = true,
     sampleRate = 1.0,
@@ -110,6 +112,7 @@ export function useTelemetryBuffer(options: TelemetryClientOptions): TelemetryCl
             type: 'TELEMETRY_BATCH',
             events,
             sequenceId,
+            userName,
           })
         );
       },

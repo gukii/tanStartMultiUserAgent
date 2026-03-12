@@ -105,7 +105,7 @@ type IncomingMessage =
   | { type: 'UNMARK_READY' }
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
   | { type: 'CLEAR_FORM' }
-  | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number }
+  | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number; userName?: string }
 
 // ---------------------------------------------------------------------------
 // Room Management (same as standalone WebSocket server)
@@ -285,7 +285,8 @@ class Room {
               this.roomId,
               userId,
               msg.events,
-              msg.sequenceId
+              msg.sequenceId,
+              msg.userName
             )
 
             console.log(`[Server] Telemetry batch processed successfully, sending ACK`);
