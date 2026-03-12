@@ -107,7 +107,7 @@ export const getAnalytics = createServerFn({ method: 'GET' })
         startTimeDate: new Date(startTime * 1000).toISOString(),
       })
 
-    // Query user metrics
+    // Query user metrics (filter by field activity time, not join time)
     const userResult = await db.execute({
       sql: `
         SELECT
@@ -121,8 +121,8 @@ export const getAnalytics = createServerFn({ method: 'GET' })
           AVG(fs.duration_ms) as avgDurationMs,
           COUNT(fs.id) as totalFieldSessions
         FROM telemetry_participants p
-        LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
-        WHERE p.joined_at >= ?
+        INNER JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
+        WHERE fs.focused_at >= ?
         GROUP BY p.user_id, p.user_name
         HAVING totalFields > 0
         ORDER BY totalFields DESC
