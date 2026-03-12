@@ -23,6 +23,12 @@ interface UserMetrics {
   aiDraftsRejected: number
   aiAcceptanceRate: number
   improvementRate: number
+  // Collaborative metrics
+  fieldsExtended: number
+  fieldsReplaced: number
+  errorsFixed: number
+  errorsIntroduced: number
+  collaborativeScore: number
 }
 
 interface CollaborationMetrics {
@@ -147,6 +153,9 @@ export const getAnalytics = createServerFn({ method: 'GET' })
         // Calculate improvement rate (simplified - compare first half vs second half of sessions)
         const improvementRate = await calculateImprovementRate(db, String(row.userId), startTime)
 
+        // Get collaborative editing metrics
+        const collabMetrics = await getCollaborativeMetrics(db, String(row.userId), startTime)
+
         return {
           userId: String(row.userId),
           userName: String(row.userName),
@@ -162,6 +171,7 @@ export const getAnalytics = createServerFn({ method: 'GET' })
           aiDraftsRejected: Number(row.aiDraftsRejected),
           aiAcceptanceRate,
           improvementRate,
+          ...collabMetrics,
         }
       })
     )
@@ -287,6 +297,61 @@ export const getAnalytics = createServerFn({ method: 'GET' })
       throw new Error('Failed to fetch analytics data')
     }
   })
+
+/**
+ * Get collaborative editing metrics for a user
+ */
+async function getCollaborativeMetrics(
+  db: ReturnType<typeof createClient>,
+  userId: string,
+  startTime: number
+): Promise<{
+  fieldsExtended: number
+  fieldsReplaced: number
+  errorsFixed: number
+  errorsIntroduced: number
+  collaborativeScore: number
+}> {
+  const result = await db.execute({
+    sql: `
+      SELECT
+        SUM(CASE WHEN edit_type = 'extend' THEN 1 ELSE 0 END) as fieldsExtended,
+        SUM(CASE WHEN edit_type = 'replace' THEN 1 ELSE 0 END) as fieldsReplaced,
+        SUM(CASE WHEN fixed_validation_error = 1 THEN 1 ELSE 0 END) as errorsFixed,
+        SUM(CASE WHEN introduced_validation_error = 1 THEN 1 ELSE 0 END) as errorsIntroduced
+      FROM telemetry_collaborative_edits
+      WHERE user_id = ? AND timestamp >= ?
+    `,
+    args: [userId, startTime],
+  })
+
+  const row = result.rows[0] as any
+  if (!row) {
+    return {
+      fieldsExtended: 0,
+      fieldsReplaced: 0,
+      errorsFixed: 0,
+      errorsIntroduced: 0,
+      collaborativeScore: 0,
+    }
+  }
+
+  const fieldsExtended = Number(row.fieldsExtended) || 0
+  const fieldsReplaced = Number(row.fieldsReplaced) || 0
+  const errorsFixed = Number(row.errorsFixed) || 0
+  const errorsIntroduced = Number(row.errorsIntroduced) || 0
+
+  // Calculate collaborative score: positive for helping (extending, fixing), negative for errors
+  const collaborativeScore = (fieldsExtended * 2) + (errorsFixed * 5) - (errorsIntroduced * 3)
+
+  return {
+    fieldsExtended,
+    fieldsReplaced,
+    errorsFixed,
+    errorsIntroduced,
+    collaborativeScore,
+  }
+}
 
 /**
  * Calculate improvement rate by comparing first half vs second half of sessions

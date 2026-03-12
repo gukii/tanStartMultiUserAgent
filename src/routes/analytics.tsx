@@ -206,11 +206,10 @@ function AnalyticsPage() {
                   <th className="px-4 py-3 font-semibold text-gray-700">User</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">Sessions</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">Fields Filled</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">Avg Time/Field</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">Forms/Hour</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Helped</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Errors</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">Accuracy</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">AI Acceptance</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">Improvement</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Collab Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,8 +221,12 @@ function AnalyticsPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">{user.totalSessions}</td>
                     <td className="px-4 py-3 text-gray-600">{user.totalFields}</td>
-                    <td className="px-4 py-3 text-gray-600">{user.avgTimePerField.toFixed(1)}s</td>
-                    <td className="px-4 py-3 text-gray-600">{user.formsPerHour.toFixed(1)}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-gray-600">{user.fieldsExtended} ext / {user.errorsFixed} fix</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-gray-600">{user.totalValidationErrors} / {user.errorsIntroduced} intr</div>
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -237,19 +240,18 @@ function AnalyticsPage() {
                         {user.accuracy.toFixed(1)}%
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{user.aiAcceptanceRate.toFixed(1)}%</td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-block ${
-                          user.improvementRate > 0
+                        className={`inline-block font-semibold ${
+                          user.collaborativeScore > 10
                             ? 'text-green-600'
-                            : user.improvementRate < 0
+                            : user.collaborativeScore < -5
                             ? 'text-red-600'
                             : 'text-gray-600'
                         }`}
+                        title={`Extended: ${user.fieldsExtended}, Replaced: ${user.fieldsReplaced}, Fixed: ${user.errorsFixed}, Introduced: ${user.errorsIntroduced}`}
                       >
-                        {user.improvementRate > 0 ? '↑' : user.improvementRate < 0 ? '↓' : '→'}{' '}
-                        {Math.abs(user.improvementRate).toFixed(1)}%
+                        {user.collaborativeScore > 0 ? '+' : ''}{user.collaborativeScore}
                       </span>
                     </td>
                   </tr>

@@ -226,6 +226,31 @@ class Room {
       case 'UPDATE_FIELD': {
         const existing = this.fieldValues.get(msg.fieldId)
         if (existing && msg.timestamp < existing.updatedAt) break
+
+        // Track collaborative edit for telemetry
+        if (existing && existing.updatedBy !== userId) {
+          const user = this.users.get(userId)
+          const previousUser = this.users.get(existing.updatedBy)
+
+          // Send collaborative edit event to telemetry
+          setImmediate(async () => {
+            try {
+              await telemetryHandler.trackCollaborativeEdit(
+                this.roomId,
+                msg.fieldId,
+                userId,
+                user?.name || userId,
+                existing.value,
+                msg.value,
+                existing.updatedBy,
+                previousUser?.name || existing.updatedBy
+              )
+            } catch (error) {
+              console.error('[Server] Error tracking collaborative edit:', error)
+            }
+          })
+        }
+
         this.fieldValues.set(msg.fieldId, { value: msg.value, updatedBy: userId, updatedAt: msg.timestamp })
         this.broadcast({ type: 'REMOTE_FIELD_UPDATE', fieldId: msg.fieldId, value: msg.value, userId, timestamp: msg.timestamp }, userId)
         break

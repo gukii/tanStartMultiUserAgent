@@ -26,6 +26,7 @@ const {
   telemetryAiInteractions,
   telemetryConflictEvents,
   telemetryPerformanceMetrics,
+  telemetryCollaborativeEdits,
 } = schemaTelemetry;
 
 // ============================================================================
@@ -477,6 +478,100 @@ export class TelemetryHandler {
       longTaskCount: data.longTaskCount,
       customMetrics: JSON.stringify(data.customMetrics || {}),
     });
+  }
+
+  /**
+   * Track collaborative field edit
+   */
+  async trackCollaborativeEdit(
+    roomId: string,
+    fieldId: string,
+    userId: string,
+    userName: string,
+    valueBefore: string,
+    valueAfter: string,
+    previousUserId: string,
+    previousUserName: string
+  ): Promise<void> {
+    const sessionId = roomId;
+
+    // Get participant IDs
+    const participantId = await this.ensureParticipant(sessionId, userId, userName);
+    const previousParticipantId = await this.ensureParticipant(sessionId, previousUserId, previousUserName);
+
+    // Determine edit type based on value changes
+    const editType = this.determineEditType(valueBefore, valueAfter);
+
+    // Calculate metrics
+    const valueChangePercent = this.calculateValueChangePercent(valueBefore, valueAfter);
+
+    // Sanitize values based on PII mode
+    const sanitizedBefore = sanitizeValue(valueBefore, PII_MODE);
+    const sanitizedAfter = sanitizeValue(valueAfter, PII_MODE);
+
+    // Store collaborative edit
+    await telemetryDb.insert(telemetryCollaborativeEdits).values({
+      sessionId,
+      fieldId,
+      timestamp: new Date(),
+      participantId,
+      userId,
+      userName,
+      valueBefore: sanitizedBefore,
+      valueAfter: sanitizedAfter,
+      editType,
+      previousParticipantId,
+      previousUserId,
+      previousUserName,
+      hadValidationError: false, // Will be updated when validation events occur
+      fixedValidationError: false,
+      introducedValidationError: false,
+      editDurationMs: null, // Could track based on timestamps
+      valueChangePercent,
+    });
+
+    console.log(`[Telemetry] Tracked collaborative edit: ${userName} edited ${fieldId} after ${previousUserName} (${editType})`);
+  }
+
+  /**
+   * Determine edit type based on value changes
+   */
+  private determineEditType(valueBefore: string, valueAfter: string): string {
+    if (!valueBefore || valueBefore.length === 0) {
+      return 'new';
+    }
+
+    if (valueAfter.startsWith(valueBefore)) {
+      return 'extend';
+    }
+
+    if (valueBefore.startsWith(valueAfter) && valueAfter.length < valueBefore.length) {
+      return 'shorten';
+    }
+
+    return 'replace';
+  }
+
+  /**
+   * Calculate percentage of value that changed
+   */
+  private calculateValueChangePercent(valueBefore: string, valueAfter: string): number {
+    if (!valueBefore) return 100;
+    if (valueBefore === valueAfter) return 0;
+
+    // Simple Levenshtein-like calculation
+    const maxLen = Math.max(valueBefore.length, valueAfter.length);
+    const minLen = Math.min(valueBefore.length, valueAfter.length);
+
+    let differences = Math.abs(valueBefore.length - valueAfter.length);
+
+    for (let i = 0; i < minLen; i++) {
+      if (valueBefore[i] !== valueAfter[i]) {
+        differences++;
+      }
+    }
+
+    return Math.round((differences / maxLen) * 100);
   }
 
   /**

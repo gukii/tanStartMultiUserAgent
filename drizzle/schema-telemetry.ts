@@ -310,6 +310,46 @@ export const telemetryPerformanceMetrics = sqliteTable('telemetry_performance_me
 }));
 
 // ============================================================================
+// 11. Collaborative Field Edits - Track multi-user field editing patterns
+// ============================================================================
+export const telemetryCollaborativeEdits = sqliteTable('telemetry_collaborative_edits', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  sessionId: text('session_id').notNull().references(() => telemetrySessions.id, { onDelete: 'cascade' }),
+  fieldId: text('field_id').notNull(),
+
+  // Edit metadata
+  timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
+  participantId: integer('participant_id').notNull().references(() => telemetryParticipants.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(), // Denormalized for easy querying
+  userName: text('user_name').notNull(), // Denormalized for easy querying
+
+  // Edit details
+  valueBefore: text('value_before'), // Sanitized based on PII mode
+  valueAfter: text('value_after'), // Sanitized based on PII mode
+  editType: text('edit_type').notNull(), // 'new', 'extend', 'replace', 'fix_error', 'introduce_error'
+
+  // Previous editor (for collaborative analysis)
+  previousParticipantId: integer('previous_participant_id').references(() => telemetryParticipants.id, { onDelete: 'set null' }),
+  previousUserId: text('previous_user_id'),
+  previousUserName: text('previous_user_name'),
+
+  // Error context
+  hadValidationError: integer('had_validation_error', { mode: 'boolean' }).notNull().default(false),
+  fixedValidationError: integer('fixed_validation_error', { mode: 'boolean' }).notNull().default(false),
+  introducedValidationError: integer('introduced_validation_error', { mode: 'boolean' }).notNull().default(false),
+
+  // Metrics
+  editDurationMs: integer('edit_duration_ms'), // Time since last edit on this field
+  valueChangePercent: integer('value_change_percent'), // % of characters changed (0-100)
+}, (table) => ({
+  sessionIdx: index('idx_telemetry_collab_edits_session').on(table.sessionId),
+  fieldIdx: index('idx_telemetry_collab_edits_field').on(table.fieldId),
+  participantIdx: index('idx_telemetry_collab_edits_participant').on(table.participantId),
+  sessionFieldIdx: index('idx_telemetry_collab_edits_session_field').on(table.sessionId, table.fieldId),
+  timestampIdx: index('idx_telemetry_collab_edits_timestamp').on(table.timestamp),
+}));
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -342,3 +382,6 @@ export type NewTelemetryConflictEvent = typeof telemetryConflictEvents.$inferIns
 
 export type TelemetryPerformanceMetric = typeof telemetryPerformanceMetrics.$inferSelect;
 export type NewTelemetryPerformanceMetric = typeof telemetryPerformanceMetrics.$inferInsert;
+
+export type TelemetryCollaborativeEdit = typeof telemetryCollaborativeEdits.$inferSelect;
+export type NewTelemetryCollaborativeEdit = typeof telemetryCollaborativeEdits.$inferInsert;
