@@ -100,15 +100,15 @@ export const getAnalytics = createServerFn({ method: 'GET' })
       // Convert to seconds for database comparison (telemetry stores Unix timestamps in seconds)
       const startTime = Math.floor(startTimeMs / 1000)
 
-      console.log('[Analytics] Query params:', {
-        timeRange: options.timeRange,
-        now,
-        startTime,
-        startTimeDate: new Date(startTime * 1000).toISOString(),
-      })
+      console.log('[Analytics] ===== TIME RANGE DEBUG =====')
+      console.log('[Analytics] Requested timeRange:', options.timeRange)
+      console.log('[Analytics] Now (ms):', now, '=', new Date(now).toISOString())
+      console.log('[Analytics] Range (ms):', timeRangeMs)
+      console.log('[Analytics] StartTimeMs:', startTimeMs, '=', new Date(startTimeMs).toISOString())
+      console.log('[Analytics] StartTime (seconds):', startTime, '=', new Date(startTime * 1000).toISOString())
+      console.log('[Analytics] =============================')
 
     // Query user metrics (filter by field activity time, not join time)
-    // Exclude anonymous users where user_name = user_id (old data before faker names)
     const userResult = await db.execute({
       sql: `
         SELECT
@@ -123,7 +123,7 @@ export const getAnalytics = createServerFn({ method: 'GET' })
           COUNT(fs.id) as totalFieldSessions
         FROM telemetry_participants p
         INNER JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
-        WHERE fs.focused_at >= ? AND p.user_name != p.user_id
+        WHERE fs.focused_at >= ?
         GROUP BY p.user_id, p.user_name
         HAVING totalFields > 0
         ORDER BY totalFields DESC
@@ -179,7 +179,6 @@ export const getAnalytics = createServerFn({ method: 'GET' })
     )
 
     // Query collaboration metrics (based on participant activity in time range, not session start)
-    // Only include participants with actual field activity and exclude anonymous users
     const collabResult = await db.execute({
       sql: `
         SELECT
@@ -198,7 +197,7 @@ export const getAnalytics = createServerFn({ method: 'GET' })
         INNER JOIN telemetry_participants p ON s.id = p.session_id
         INNER JOIN telemetry_field_sessions fs ON s.id = fs.session_id AND fs.participant_id = p.id
         LEFT JOIN telemetry_validation_events ve ON s.id = ve.session_id
-        WHERE fs.focused_at >= ? AND p.user_name != p.user_id
+        WHERE fs.focused_at >= ?
         GROUP BY s.id
         HAVING participantCount > 1
         ORDER BY lastActivity DESC

@@ -83,9 +83,12 @@ function AnalyticsPage() {
     async function fetchData() {
       try {
         setLoading(true)
-        console.log('[Analytics] Fetching data for timeRange:', timeRange)
+        console.log('[Analytics Client] ===== FETCHING =====')
+        console.log('[Analytics Client] timeRange:', timeRange)
+        console.log('[Analytics Client] Calling getAnalytics with:', { timeRange })
         const result = await getAnalytics({ timeRange })
-        console.log('[Analytics] Fetched data:', result)
+        console.log('[Analytics Client] Received result with', result.users?.length || 0, 'users')
+        console.log('[Analytics Client] ========================')
         setData(result)
         setLastFetched(new Date())
         setError(null)
