@@ -108,6 +108,7 @@ export const getAnalytics = createServerFn({ method: 'GET' })
       })
 
     // Query user metrics (filter by field activity time, not join time)
+    // Exclude anonymous users where user_name = user_id (old data before faker names)
     const userResult = await db.execute({
       sql: `
         SELECT
@@ -122,7 +123,7 @@ export const getAnalytics = createServerFn({ method: 'GET' })
           COUNT(fs.id) as totalFieldSessions
         FROM telemetry_participants p
         INNER JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
-        WHERE fs.focused_at >= ?
+        WHERE fs.focused_at >= ? AND p.user_name != p.user_id
         GROUP BY p.user_id, p.user_name
         HAVING totalFields > 0
         ORDER BY totalFields DESC
@@ -131,9 +132,10 @@ export const getAnalytics = createServerFn({ method: 'GET' })
     })
     const userRows = userResult.rows as any[]
 
-    console.log('[Analytics] User query returned', userRows.length, 'rows')
+    console.log('[Analytics] User query returned', userRows.length, 'rows for timeRange:', options.timeRange)
+    console.log('[Analytics] Query used startTime:', startTime, '=', new Date(startTime * 1000).toISOString())
     if (userRows.length > 0) {
-      console.log('[Analytics] First row:', userRows[0])
+      console.log('[Analytics] First 3 users:', userRows.slice(0, 3).map(r => ({ userId: r.userId, userName: r.userName, fields: r.totalFields })))
     }
 
     const users: UserMetrics[] = await Promise.all(
@@ -177,6 +179,7 @@ export const getAnalytics = createServerFn({ method: 'GET' })
     )
 
     // Query collaboration metrics (based on participant activity in time range, not session start)
+    // Only include participants with actual field activity and exclude anonymous users
     const collabResult = await db.execute({
       sql: `
         SELECT
@@ -190,12 +193,12 @@ export const getAnalytics = createServerFn({ method: 'GET' })
           COUNT(DISTINCT fs.field_id) as totalFields,
           COUNT(DISTINCT ve.field_id) as validationErrors,
           GROUP_CONCAT(DISTINCT p.user_name) as participants,
-          MAX(p.joined_at) as lastActivity
+          MAX(fs.focused_at) as lastActivity
         FROM telemetry_sessions s
         INNER JOIN telemetry_participants p ON s.id = p.session_id
-        LEFT JOIN telemetry_field_sessions fs ON s.id = fs.session_id AND fs.participant_id = p.id
+        INNER JOIN telemetry_field_sessions fs ON s.id = fs.session_id AND fs.participant_id = p.id
         LEFT JOIN telemetry_validation_events ve ON s.id = ve.session_id
-        WHERE p.joined_at >= ?
+        WHERE fs.focused_at >= ? AND p.user_name != p.user_id
         GROUP BY s.id
         HAVING participantCount > 1
         ORDER BY lastActivity DESC

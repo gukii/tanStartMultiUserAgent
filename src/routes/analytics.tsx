@@ -229,7 +229,13 @@ function AnalyticsPage() {
                 {filteredUsers.map((user) => (
                   <tr key={user.userId} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{user.userName}</div>
+                      <div className="font-medium text-gray-900">
+                        {user.userName === user.userId ? (
+                          <span className="text-gray-400 italic">Anonymous User</span>
+                        ) : (
+                          user.userName
+                        )}
+                      </div>
                       <div className="text-xs text-gray-500">{user.userId}</div>
                     </td>
                     <td className="px-4 py-3 text-gray-600">{user.totalSessions}</td>
