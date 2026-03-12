@@ -60,36 +60,7 @@ function CheckoutForm({
   }, [])
 
   function resetForm() {
-    // Clear all form fields
-    const formElements = document.querySelectorAll('form input, form textarea, form select')
-    formElements.forEach((element) => {
-      if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-        element.value = ''
-        // Dispatch events so CollaborationHarness picks up the change
-        element.dispatchEvent(new Event('input', { bubbles: true }))
-        element.dispatchEvent(new Event('change', { bubbles: true }))
-      } else if (element instanceof HTMLSelectElement) {
-        element.selectedIndex = 0
-        element.dispatchEvent(new Event('change', { bubbles: true }))
-      }
-    })
-
-    // Clear form-related localStorage (preserve settings and cursor chat)
-    if (typeof window !== 'undefined') {
-      const preserveKeys = ['floatingChatPosition']
-      const keysToRemove: string[] = []
-
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (key && !preserveKeys.includes(key)) {
-          keysToRemove.push(key)
-        }
-      }
-
-      keysToRemove.forEach((key) => localStorage.removeItem(key))
-    }
-
-    // Clear server-side field values and drafts
+    // Clear server-side field values and drafts (this broadcasts FORM_CLEARED to all clients)
     clearForm()
 
     // Reset submitted state and mark that user has manually reset
