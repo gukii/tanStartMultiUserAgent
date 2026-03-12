@@ -176,7 +176,7 @@ export const getAnalytics = createServerFn({ method: 'GET' })
       })
     )
 
-    // Query collaboration metrics
+    // Query collaboration metrics (based on participant activity in time range, not session start)
     const collabResult = await db.execute({
       sql: `
         SELECT
@@ -186,17 +186,19 @@ export const getAnalytics = createServerFn({ method: 'GET' })
           s.submit_mode as submitMode,
           s.duration_ms as completionTime,
           s.outcome,
-          s.total_participants as participantCount,
+          COUNT(DISTINCT p.id) as participantCount,
           COUNT(DISTINCT fs.field_id) as totalFields,
           COUNT(DISTINCT ve.field_id) as validationErrors,
-          GROUP_CONCAT(DISTINCT p.user_name) as participants
+          GROUP_CONCAT(DISTINCT p.user_name) as participants,
+          MAX(p.joined_at) as lastActivity
         FROM telemetry_sessions s
-        LEFT JOIN telemetry_participants p ON s.id = p.session_id
-        LEFT JOIN telemetry_field_sessions fs ON s.id = fs.session_id
+        INNER JOIN telemetry_participants p ON s.id = p.session_id
+        LEFT JOIN telemetry_field_sessions fs ON s.id = fs.session_id AND fs.participant_id = p.id
         LEFT JOIN telemetry_validation_events ve ON s.id = ve.session_id
-        WHERE s.started_at >= ? AND s.total_participants > 1
+        WHERE p.joined_at >= ?
         GROUP BY s.id
-        ORDER BY s.started_at DESC
+        HAVING participantCount > 1
+        ORDER BY lastActivity DESC
         LIMIT 20
       `,
       args: [startTime],

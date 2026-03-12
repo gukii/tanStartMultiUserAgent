@@ -77,6 +77,7 @@ function AnalyticsPage() {
   const [error, setError] = useState<string | null>(null)
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
   const [selectedUser, setSelectedUser] = useState<string | null>(null)
+  const [lastFetched, setLastFetched] = useState<Date | null>(null)
 
   useEffect(() => {
     async function fetchData() {
@@ -86,6 +87,7 @@ function AnalyticsPage() {
         const result = await getAnalytics({ timeRange })
         console.log('[Analytics] Fetched data:', result)
         setData(result)
+        setLastFetched(new Date())
         setError(null)
       } catch (err) {
         console.error('[Analytics] Fetch error:', err)
@@ -159,24 +161,33 @@ function AnalyticsPage() {
         </div>
 
         {/* Time Range Selector */}
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">Time range:</span>
-          {(['1h', '24h', '7d', '30d'] as const).map((range) => (
-            <button
-              key={range}
-              onClick={() => setTimeRange(range)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                timeRange === range
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              {range === '1h' ? 'Last Hour' : range === '24h' ? 'Last 24h' : range === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
-            </button>
-          ))}
-          <span className="ml-2 text-sm text-gray-500">
-            ({(data.users || []).length} user{(data.users || []).length !== 1 ? 's' : ''}, {collaborations.length} collaboration{collaborations.length !== 1 ? 's' : ''})
-          </span>
+        <div className="mb-6 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Time range:</span>
+            {(['1h', '24h', '7d', '30d'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                  timeRange === range
+                    ? 'bg-violet-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {range === '1h' ? 'Last Hour' : range === '24h' ? 'Last 24h' : range === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
+              </button>
+            ))}
+          </div>
+          <div className="text-xs text-gray-500">
+            {loading ? (
+              <span className="text-violet-600">Loading...</span>
+            ) : (
+              <>
+                Showing {(data.users || []).length} user{(data.users || []).length !== 1 ? 's' : ''}, {collaborations.length} collaboration{collaborations.length !== 1 ? 's' : ''}
+                {lastFetched && ` • Updated ${lastFetched.toLocaleTimeString()}`}
+              </>
+            )}
+          </div>
         </div>
 
         {/* User Performance Overview */}
@@ -205,11 +216,13 @@ function AnalyticsPage() {
                 <tr>
                   <th className="px-4 py-3 font-semibold text-gray-700">User</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">Sessions</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">Fields Filled</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">Helped</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">Errors</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Fields</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Extended</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Replaced</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Fixed</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Broke</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">Accuracy</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">Collab Score</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -221,11 +234,25 @@ function AnalyticsPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">{user.totalSessions}</td>
                     <td className="px-4 py-3 text-gray-600">{user.totalFields}</td>
-                    <td className="px-4 py-3">
-                      <div className="text-gray-600">{user.fieldsExtended} ext / {user.errorsFixed} fix</div>
+                    <td className="px-4 py-3 text-center">
+                      <span className={user.fieldsExtended > 0 ? 'text-green-600 font-semibold' : 'text-gray-400'}>
+                        {user.fieldsExtended}
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="text-gray-600">{user.totalValidationErrors} / {user.errorsIntroduced} intr</div>
+                    <td className="px-4 py-3 text-center">
+                      <span className={user.fieldsReplaced > 0 ? 'text-blue-600' : 'text-gray-400'}>
+                        {user.fieldsReplaced}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={user.errorsFixed > 0 ? 'text-green-600 font-semibold' : 'text-gray-400'}>
+                        {user.errorsFixed}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={user.errorsIntroduced > 0 ? 'text-red-600 font-semibold' : 'text-gray-400'}>
+                        {user.errorsIntroduced}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -240,16 +267,16 @@ function AnalyticsPage() {
                         {user.accuracy.toFixed(1)}%
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-center">
                       <span
-                        className={`inline-block font-semibold ${
+                        className={`inline-block font-bold ${
                           user.collaborativeScore > 10
                             ? 'text-green-600'
                             : user.collaborativeScore < -5
                             ? 'text-red-600'
                             : 'text-gray-600'
                         }`}
-                        title={`Extended: ${user.fieldsExtended}, Replaced: ${user.fieldsReplaced}, Fixed: ${user.errorsFixed}, Introduced: ${user.errorsIntroduced}`}
+                        title={`+2 per extend, +5 per fix, -3 per error introduced`}
                       >
                         {user.collaborativeScore > 0 ? '+' : ''}{user.collaborativeScore}
                       </span>
