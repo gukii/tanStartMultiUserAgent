@@ -70,13 +70,22 @@ interface AnalyticsData {
 
 export const getAnalytics = createServerFn({ method: 'GET' })
   .inputValidator((input: unknown): { timeRange: '1h' | '24h' | '7d' | '30d' } => {
+    console.log('[Analytics Validator] Received input:', JSON.stringify(input))
+    console.log('[Analytics Validator] Input type:', typeof input)
+    console.log('[Analytics Validator] Has timeRange?', input && typeof input === 'object' && 'timeRange' in input)
+
     if (!input || typeof input !== 'object' || !('timeRange' in input)) {
+      console.log('[Analytics Validator] Input invalid, defaulting to 24h')
       return { timeRange: '24h' }
     }
     const { timeRange } = input as { timeRange: string }
+    console.log('[Analytics Validator] Extracted timeRange:', timeRange)
+
     if (!['1h', '24h', '7d', '30d'].includes(timeRange)) {
+      console.log('[Analytics Validator] timeRange not in valid list, defaulting to 24h')
       return { timeRange: '24h' }
     }
+    console.log('[Analytics Validator] Returning timeRange:', timeRange)
     return { timeRange: timeRange as '1h' | '24h' | '7d' | '30d' }
   })
   .handler(async (ctx): Promise<AnalyticsData> => {
