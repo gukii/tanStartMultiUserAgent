@@ -105,6 +105,7 @@ type IncomingMessage =
   | { type: 'UNMARK_READY' }
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
   | { type: 'CLEAR_FORM' }
+  | { type: 'VALIDATION_STATUS'; fieldId: string; hasError: boolean; errorMessage?: string }
   | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number; userName?: string }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +122,7 @@ class Room {
   private submitMode: 'any' | 'consensus' = 'any'
   private readyStates = new Map<string, boolean>()
   private fieldLocks = new Map<string, string>()
+  private validationErrors = new Map<string, { hasError: boolean; errorMessage?: string}>()
   private clients = new Map<string, WebSocket>()
 
   constructor(public roomId: string) {}
@@ -232,6 +234,9 @@ class Room {
           const user = this.users.get(userId)
           const previousUser = this.users.get(existing.updatedBy)
 
+          // Check validation state before and potentially after edit
+          const hadValidationError = this.validationErrors.get(msg.fieldId)?.hasError || false
+
           // Send collaborative edit event to telemetry
           setImmediate(async () => {
             try {
@@ -243,7 +248,8 @@ class Room {
                 existing.value,
                 msg.value,
                 existing.updatedBy,
-                previousUser?.name || existing.updatedBy
+                previousUser?.name || existing.updatedBy,
+                hadValidationError
               )
             } catch (error) {
               console.error('[Server] Error tracking collaborative edit:', error)
@@ -299,6 +305,54 @@ class Room {
         // Clear ready states after submission
         this.readyStates.clear()
         break
+
+      case 'VALIDATION_STATUS': {
+        // Track validation error state for collaborative edit analysis
+        const previousState = this.validationErrors.get(msg.fieldId)
+
+        this.validationErrors.set(msg.fieldId, {
+          hasError: msg.hasError,
+          errorMessage: msg.errorMessage,
+        })
+
+        // If error was fixed (had error, now doesn't), retroactively update last collaborative edit
+        if (previousState?.hasError && !msg.hasError) {
+          const fieldValue = this.fieldValues.get(msg.fieldId)
+          if (fieldValue) {
+            setImmediate(async () => {
+              try {
+                await telemetryHandler.markValidationFixed(
+                  this.roomId,
+                  msg.fieldId,
+                  fieldValue.updatedBy
+                )
+              } catch (error) {
+                console.error('[Server] Error marking validation fixed:', error)
+              }
+            })
+          }
+        }
+
+        // If error was introduced (didn't have error, now does), retroactively update last collaborative edit
+        if (!previousState?.hasError && msg.hasError) {
+          const fieldValue = this.fieldValues.get(msg.fieldId)
+          if (fieldValue) {
+            setImmediate(async () => {
+              try {
+                await telemetryHandler.markValidationIntroduced(
+                  this.roomId,
+                  msg.fieldId,
+                  fieldValue.updatedBy,
+                  msg.errorMessage
+                )
+              } catch (error) {
+                console.error('[Server] Error marking validation introduced:', error)
+              }
+            })
+          }
+        }
+        break
+      }
 
       case 'TELEMETRY_BATCH': {
         console.log(`[Server] Received TELEMETRY_BATCH from ${userId}: ${msg.events.length} events, sequence ${msg.sequenceId}`);

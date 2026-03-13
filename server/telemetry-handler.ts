@@ -491,7 +491,8 @@ export class TelemetryHandler {
     valueBefore: string,
     valueAfter: string,
     previousUserId: string,
-    previousUserName: string
+    previousUserName: string,
+    hadValidationError: boolean = false
   ): Promise<void> {
     const sessionId = roomId;
 
@@ -523,14 +524,75 @@ export class TelemetryHandler {
       previousParticipantId,
       previousUserId,
       previousUserName,
-      hadValidationError: false, // Will be updated when validation events occur
-      fixedValidationError: false,
-      introducedValidationError: false,
+      hadValidationError, // Passed from server based on validation state
+      fixedValidationError: false, // Will be updated retroactively via markValidationFixed
+      introducedValidationError: false, // Will be updated retroactively via markValidationIntroduced
       editDurationMs: null, // Could track based on timestamps
       valueChangePercent,
     });
 
     console.log(`[Telemetry] Tracked collaborative edit: ${userName} edited ${fieldId} after ${previousUserName} (${editType})`);
+  }
+
+  /**
+   * Mark the most recent collaborative edit for a field as fixing a validation error
+   */
+  async markValidationFixed(
+    roomId: string,
+    fieldId: string,
+    userId: string
+  ): Promise<void> {
+    const sessionId = roomId;
+
+    // Find the most recent collaborative edit for this field by this user
+    const result = await telemetryDb
+      .update(telemetryCollaborativeEdits)
+      .set({
+        fixedValidationError: true,
+      })
+      .where(
+        and(
+          eq(telemetryCollaborativeEdits.sessionId, sessionId),
+          eq(telemetryCollaborativeEdits.fieldId, fieldId),
+          eq(telemetryCollaborativeEdits.userId, userId)
+        )
+      )
+      .returning();
+
+    if (result.length > 0) {
+      console.log(`[Telemetry] Marked validation as fixed: ${userId} fixed ${fieldId}`);
+    }
+  }
+
+  /**
+   * Mark the most recent collaborative edit for a field as introducing a validation error
+   */
+  async markValidationIntroduced(
+    roomId: string,
+    fieldId: string,
+    userId: string,
+    errorMessage?: string
+  ): Promise<void> {
+    const sessionId = roomId;
+
+    // Find the most recent collaborative edit for this field by this user
+    const result = await telemetryDb
+      .update(telemetryCollaborativeEdits)
+      .set({
+        introducedValidationError: true,
+      })
+      .where(
+        and(
+          eq(telemetryCollaborativeEdits.sessionId, sessionId),
+          eq(telemetryCollaborativeEdits.fieldId, fieldId),
+          eq(telemetryCollaborativeEdits.userId, userId)
+        )
+      )
+      .returning();
+
+    if (result.length > 0) {
+      console.log(`[Telemetry] Marked validation as introduced: ${userId} broke ${fieldId} - ${errorMessage || 'unknown error'}`);
+    }
   }
 
   /**

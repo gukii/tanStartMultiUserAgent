@@ -125,6 +125,7 @@ export type ClientMessage =
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
   | { type: 'FORM_SUBMITTED' } // Notify all peers that form was submitted
   | { type: 'CLEAR_FORM' } // Clear all field values, drafts, and ready states
+  | { type: 'VALIDATION_STATUS'; fieldId: string; hasError: boolean; errorMessage?: string } // Notify server of validation state
   | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number } // Telemetry data batch
 
 /** Messages the server sends to clients */

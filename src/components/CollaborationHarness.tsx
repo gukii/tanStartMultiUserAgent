@@ -1098,6 +1098,14 @@ export function CollaborationHarness({
         }
         pendingUpdate = null
       }, 50)
+
+      // Notify server of validation error for collaborative tracking
+      send({
+        type: 'VALIDATION_STATUS',
+        fieldId,
+        hasError: true,
+        errorMessage: message,
+      })
     }
 
     function onSubmit(e: Event) {
@@ -1124,6 +1132,13 @@ export function CollaborationHarness({
         if (remainingErrors.length === 0) {
           setSubmitButtonElement(null)
         }
+
+        // Notify server that validation error was cleared
+        send({
+          type: 'VALIDATION_STATUS',
+          fieldId,
+          hasError: false,
+        })
       }
     }
 
