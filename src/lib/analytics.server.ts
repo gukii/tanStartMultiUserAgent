@@ -68,28 +68,17 @@ interface AnalyticsData {
   timeSeriesData: TimeSeriesPoint[]
 }
 
-export const getAnalytics = createServerFn({ method: 'GET' })
-  .inputValidator((input: unknown): { timeRange: '1h' | '24h' | '7d' | '30d' } => {
-    console.log('[Analytics Validator] Received input:', JSON.stringify(input))
-    console.log('[Analytics Validator] Input type:', typeof input)
-    console.log('[Analytics Validator] Has timeRange?', input && typeof input === 'object' && 'timeRange' in input)
+export const getAnalytics = createServerFn({ method: 'POST' }).handler(async (ctx): Promise<AnalyticsData> => {
+    // Access data directly from ctx.data
+    const input = ctx.data as { timeRange?: string }
 
-    if (!input || typeof input !== 'object' || !('timeRange' in input)) {
-      console.log('[Analytics Validator] Input invalid, defaulting to 24h')
-      return { timeRange: '24h' }
+    // Validate and set default
+    let timeRange: '1h' | '24h' | '7d' | '30d' = '24h'
+    if (input?.timeRange && ['1h', '24h', '7d', '30d'].includes(input.timeRange)) {
+      timeRange = input.timeRange as '1h' | '24h' | '7d' | '30d'
     }
-    const { timeRange } = input as { timeRange: string }
-    console.log('[Analytics Validator] Extracted timeRange:', timeRange)
 
-    if (!['1h', '24h', '7d', '30d'].includes(timeRange)) {
-      console.log('[Analytics Validator] timeRange not in valid list, defaulting to 24h')
-      return { timeRange: '24h' }
-    }
-    console.log('[Analytics Validator] Returning timeRange:', timeRange)
-    return { timeRange: timeRange as '1h' | '24h' | '7d' | '30d' }
-  })
-  .handler(async (ctx): Promise<AnalyticsData> => {
-    const options = ctx.data
+    const options = { timeRange }
     const dbPath = path.join(process.cwd(), 'data', 'telemetry.db')
     const db = createClient({
       url: `file:${dbPath}`,
@@ -108,14 +97,6 @@ export const getAnalytics = createServerFn({ method: 'GET' })
 
       // Convert to seconds for database comparison (telemetry stores Unix timestamps in seconds)
       const startTime = Math.floor(startTimeMs / 1000)
-
-      console.log('[Analytics] ===== TIME RANGE DEBUG =====')
-      console.log('[Analytics] Requested timeRange:', options.timeRange)
-      console.log('[Analytics] Now (ms):', now, '=', new Date(now).toISOString())
-      console.log('[Analytics] Range (ms):', timeRangeMs)
-      console.log('[Analytics] StartTimeMs:', startTimeMs, '=', new Date(startTimeMs).toISOString())
-      console.log('[Analytics] StartTime (seconds):', startTime, '=', new Date(startTime * 1000).toISOString())
-      console.log('[Analytics] =============================')
 
     // Query user metrics (filter by field activity time, not join time)
     const userResult = await db.execute({
@@ -140,12 +121,6 @@ export const getAnalytics = createServerFn({ method: 'GET' })
       args: [startTime],
     })
     const userRows = userResult.rows as any[]
-
-    console.log('[Analytics] User query returned', userRows.length, 'rows for timeRange:', options.timeRange)
-    console.log('[Analytics] Query used startTime:', startTime, '=', new Date(startTime * 1000).toISOString())
-    if (userRows.length > 0) {
-      console.log('[Analytics] First 3 users:', userRows.slice(0, 3).map(r => ({ userId: r.userId, userName: r.userName, fields: r.totalFields })))
-    }
 
     const users: UserMetrics[] = await Promise.all(
       userRows.map(async (row) => {
@@ -240,13 +215,13 @@ export const getAnalytics = createServerFn({ method: 'GET' })
       sql: `
         SELECT
           fs.field_id as fieldId,
-          fs.field_label as fieldLabel,
+          MAX(fs.field_label) as fieldLabel,
           COUNT(*) as totalCompletions,
           AVG(fs.duration_ms) / 1000.0 as avgCompletionTime
         FROM telemetry_field_sessions fs
         JOIN telemetry_sessions s ON fs.session_id = s.id
         WHERE fs.focused_at >= ? AND s.total_participants > 1 AND fs.was_completed = 1
-        GROUP BY fs.field_id, fs.field_label
+        GROUP BY fs.field_id
         ORDER BY totalCompletions DESC
         LIMIT 20
       `,
@@ -296,13 +271,6 @@ export const getAnalytics = createServerFn({ method: 'GET' })
       fieldPreferences,
       timeSeriesData,
     } as AnalyticsData
-
-    console.log('[Analytics] Returning data:', {
-      userCount: users.length,
-      collabCount: collaborations.length,
-      fieldPrefCount: fieldPreferences.length,
-      timeSeriesCount: timeSeriesData.length,
-    })
 
     return result
     } catch (error) {
