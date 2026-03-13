@@ -68,17 +68,19 @@ interface AnalyticsData {
   timeSeriesData: TimeSeriesPoint[]
 }
 
-export const getAnalytics = createServerFn({ method: 'POST' }).handler(async (ctx): Promise<AnalyticsData> => {
-    // Access data directly from ctx.data
-    const input = ctx.data as { timeRange?: string }
+export const getAnalytics = createServerFn({ method: 'GET' })
+  .inputValidator((data: { timeRange?: string }) => {
+    // Validate and normalize the timeRange parameter
+    const timeRange = data?.timeRange || '24h'
 
-    // Validate and set default
-    let timeRange: '1h' | '24h' | '7d' | '30d' = '24h'
-    if (input?.timeRange && ['1h', '24h', '7d', '30d'].includes(input.timeRange)) {
-      timeRange = input.timeRange as '1h' | '24h' | '7d' | '30d'
+    if (!['1h', '24h', '7d', '30d'].includes(timeRange)) {
+      return { timeRange: '24h' as const }
     }
 
-    const options = { timeRange }
+    return { timeRange: timeRange as '1h' | '24h' | '7d' | '30d' }
+  })
+  .handler(async ({ data }): Promise<AnalyticsData> => {
+    const options = data
     const dbPath = path.join(process.cwd(), 'data', 'telemetry.db')
     const db = createClient({
       url: `file:${dbPath}`,
