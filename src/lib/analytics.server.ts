@@ -376,3 +376,115 @@ async function calculateImprovementRate(
   const improvement = ((firstHalfAvgSpeed - secondHalfAvgSpeed) / firstHalfAvgSpeed) * 100
   return improvement
 }
+
+/**
+ * Get detailed collaborative edit history for drill-down analytics
+ */
+export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
+  .inputValidator((data: { userId?: string; sessionId?: string; fieldId?: string; timeRange?: string }) => {
+    return {
+      userId: data.userId,
+      sessionId: data.sessionId,
+      fieldId: data.fieldId,
+      timeRange: (data.timeRange && ['1h', '24h', '7d', '30d'].includes(data.timeRange)) 
+        ? data.timeRange as '1h' | '24h' | '7d' | '30d'
+        : '24h',
+    }
+  })
+  .handler(async ({ data }) => {
+    const dbPath = path.join(process.cwd(), 'data', 'telemetry.db')
+    const db = createClient({
+      url: `file:${dbPath}`,
+    })
+
+    try {
+      // Calculate time range
+      const now = Date.now()
+      const timeRangeMs = {
+        '1h': 60 * 60 * 1000,
+        '24h': 24 * 60 * 60 * 1000,
+        '7d': 7 * 24 * 60 * 60 * 1000,
+        '30d': 30 * 24 * 60 * 60 * 1000,
+      }[data.timeRange]
+      const startTimeMs = now - timeRangeMs
+      const startTime = Math.floor(startTimeMs / 1000)
+
+      // Build WHERE clause based on filters
+      const conditions: string[] = ['ce.timestamp >= ?']
+      const args: any[] = [startTime]
+
+      if (data.userId) {
+        conditions.push('ce.user_id = ?')
+        args.push(data.userId)
+      }
+
+      if (data.sessionId) {
+        conditions.push('ce.session_id = ?')
+        args.push(data.sessionId)
+      }
+
+      if (data.fieldId) {
+        conditions.push('ce.field_id = ?')
+        args.push(data.fieldId)
+      }
+
+      const whereClause = conditions.join(' AND ')
+
+      // Query collaborative edits with details
+      const result = await db.execute({
+        sql: `
+          SELECT
+            ce.id,
+            ce.session_id as sessionId,
+            ce.field_id as fieldId,
+            ce.timestamp,
+            ce.user_id as userId,
+            ce.user_name as userName,
+            ce.value_before as valueBefore,
+            ce.value_after as valueAfter,
+            ce.edit_type as editType,
+            ce.previous_user_id as previousUserId,
+            ce.previous_user_name as previousUserName,
+            ce.had_validation_error as hadValidationError,
+            ce.fixed_validation_error as fixedValidationError,
+            ce.introduced_validation_error as introducedValidationError,
+            ce.value_change_percent as valueChangePercent,
+            s.route,
+            s.submit_mode as submitMode,
+            s.outcome
+          FROM telemetry_collaborative_edits ce
+          JOIN telemetry_sessions s ON ce.session_id = s.id
+          WHERE ${whereClause}
+          ORDER BY ce.timestamp DESC
+          LIMIT 100
+        `,
+        args,
+      })
+
+      const edits = result.rows.map((row: any) => ({
+        id: Number(row.id),
+        sessionId: String(row.sessionId),
+        fieldId: String(row.fieldId),
+        timestamp: Number(row.timestamp),
+        userId: String(row.userId),
+        userName: String(row.userName),
+        valueBefore: String(row.valueBefore || ''),
+        valueAfter: String(row.valueAfter || ''),
+        editType: String(row.editType),
+        previousUserId: row.previousUserId ? String(row.previousUserId) : null,
+        previousUserName: row.previousUserName ? String(row.previousUserName) : null,
+        hadValidationError: Boolean(row.hadValidationError),
+        fixedValidationError: Boolean(row.fixedValidationError),
+        introducedValidationError: Boolean(row.introducedValidationError),
+        valueChangePercent: Number(row.valueChangePercent) || 0,
+        route: String(row.route),
+        submitMode: String(row.submitMode),
+        outcome: row.outcome ? String(row.outcome) : null,
+      }))
+
+      return { edits }
+    } catch (error) {
+      console.error('[Analytics] Error fetching collaborative edit details:', error)
+      throw new Error('Failed to fetch collaborative edit details')
+    }
+  })

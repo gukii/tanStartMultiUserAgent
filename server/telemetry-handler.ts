@@ -544,12 +544,10 @@ export class TelemetryHandler {
   ): Promise<void> {
     const sessionId = roomId;
 
-    // Find the most recent collaborative edit for this field by this user
-    const result = await telemetryDb
-      .update(telemetryCollaborativeEdits)
-      .set({
-        fixedValidationError: true,
-      })
+    // Find the most recent collaborative edit ID for this field by this user
+    const recentEdit = await telemetryDb
+      .select({ id: telemetryCollaborativeEdits.id })
+      .from(telemetryCollaborativeEdits)
       .where(
         and(
           eq(telemetryCollaborativeEdits.sessionId, sessionId),
@@ -557,9 +555,17 @@ export class TelemetryHandler {
           eq(telemetryCollaborativeEdits.userId, userId)
         )
       )
-      .returning();
+      .orderBy(sql`${telemetryCollaborativeEdits.timestamp} DESC`)
+      .limit(1);
 
-    if (result.length > 0) {
+    if (recentEdit.length > 0) {
+      await telemetryDb
+        .update(telemetryCollaborativeEdits)
+        .set({
+          fixedValidationError: true,
+        })
+        .where(eq(telemetryCollaborativeEdits.id, recentEdit[0].id));
+
       console.log(`[Telemetry] Marked validation as fixed: ${userId} fixed ${fieldId}`);
     }
   }
@@ -575,12 +581,10 @@ export class TelemetryHandler {
   ): Promise<void> {
     const sessionId = roomId;
 
-    // Find the most recent collaborative edit for this field by this user
-    const result = await telemetryDb
-      .update(telemetryCollaborativeEdits)
-      .set({
-        introducedValidationError: true,
-      })
+    // Find the most recent collaborative edit ID for this field by this user
+    const recentEdit = await telemetryDb
+      .select({ id: telemetryCollaborativeEdits.id })
+      .from(telemetryCollaborativeEdits)
       .where(
         and(
           eq(telemetryCollaborativeEdits.sessionId, sessionId),
@@ -588,9 +592,17 @@ export class TelemetryHandler {
           eq(telemetryCollaborativeEdits.userId, userId)
         )
       )
-      .returning();
+      .orderBy(sql`${telemetryCollaborativeEdits.timestamp} DESC`)
+      .limit(1);
 
-    if (result.length > 0) {
+    if (recentEdit.length > 0) {
+      await telemetryDb
+        .update(telemetryCollaborativeEdits)
+        .set({
+          introducedValidationError: true,
+        })
+        .where(eq(telemetryCollaborativeEdits.id, recentEdit[0].id));
+
       console.log(`[Telemetry] Marked validation as introduced: ${userId} broke ${fieldId} - ${errorMessage || 'unknown error'}`);
     }
   }
