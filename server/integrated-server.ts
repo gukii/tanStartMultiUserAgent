@@ -443,8 +443,12 @@ class Room {
         break
       }
       case 'FIELD_BLUR': {
-        // Flush edit buffers for this field when user leaves it
-        await this.flushFieldBuffers(msg.fieldId, 'field_blur')
+        // Flush edit buffers for this field when user leaves it (async, non-blocking)
+        setImmediate(() => {
+          this.flushFieldBuffers(msg.fieldId, 'field_blur').catch(err => {
+            console.error('[Room] Error flushing field buffers:', err)
+          })
+        })
 
         const lockOwner = this.fieldLocks.get(msg.fieldId)
         if (lockOwner === userId) {
@@ -539,9 +543,13 @@ class Room {
         this.broadcast({ type: 'FORM_CLEARED' })
         break
       case 'FORM_SUBMITTED': {
-        // End current submission cycle with metrics
+        // End current submission cycle with metrics (async, non-blocking)
         const user = this.users.get(userId)
-        await this.endSubmissionCycle(userId, user?.name || userId)
+        setImmediate(() => {
+          this.endSubmissionCycle(userId, user?.name || userId).catch(err => {
+            console.error('[Room] Error ending submission cycle:', err)
+          })
+        })
 
         // Broadcast to all other peers that form was submitted
         this.broadcast({ type: 'FORM_SUBMITTED', userId })
