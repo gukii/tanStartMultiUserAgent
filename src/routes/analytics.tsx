@@ -13,7 +13,7 @@
 
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { getAnalytics } from '../lib/analytics.server'
+import { getAnalytics, getCollaborativeEditDetails } from '../lib/analytics.server'
 
 export const Route = createFileRoute('/analytics')({
   component: AnalyticsPage,
@@ -71,6 +71,27 @@ interface AnalyticsData {
   }>
 }
 
+interface CollaborativeEdit {
+  id: number
+  sessionId: string
+  fieldId: string
+  timestamp: number
+  userId: string
+  userName: string
+  valueBefore: string
+  valueAfter: string
+  editType: string
+  previousUserId: string | null
+  previousUserName: string | null
+  hadValidationError: boolean
+  fixedValidationError: boolean
+  introducedValidationError: boolean
+  valueChangePercent: number
+  route: string
+  submitMode: string
+  outcome: string | null
+}
+
 function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -78,6 +99,9 @@ function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
   const [selectedUser, setSelectedUser] = useState<string | null>(null)
   const [lastFetched, setLastFetched] = useState<Date | null>(null)
+  const [drillDownUserId, setDrillDownUserId] = useState<string | null>(null)
+  const [drillDownData, setDrillDownData] = useState<CollaborativeEdit[] | null>(null)
+  const [drillDownLoading, setDrillDownLoading] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
@@ -96,6 +120,33 @@ function AnalyticsPage() {
     }
     fetchData()
   }, [timeRange])
+
+  // Fetch drill-down data when user is selected
+  useEffect(() => {
+    async function fetchDrillDown() {
+      if (!drillDownUserId) {
+        setDrillDownData(null)
+        return
+      }
+
+      try {
+        setDrillDownLoading(true)
+        const result = await getCollaborativeEditDetails({
+          data: { userId: drillDownUserId, timeRange }
+        })
+        setDrillDownData(result.edits)
+      } catch (err) {
+        console.error('[Analytics] Drill-down fetch error:', err)
+      } finally {
+        setDrillDownLoading(false)
+      }
+    }
+    fetchDrillDown()
+  }, [drillDownUserId, timeRange])
+
+  const handleUserClick = (userId: string) => {
+    setDrillDownUserId(userId === drillDownUserId ? null : userId)
+  }
 
   if (loading) {
     return (
@@ -225,7 +276,11 @@ function AnalyticsPage() {
               </thead>
               <tbody>
                 {filteredUsers.map((user) => (
-                  <tr key={user.userId} className="border-b border-gray-100 hover:bg-gray-50">
+                  <tr
+                    key={user.userId}
+                    className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                    onClick={() => handleUserClick(user.userId)}
+                  >
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">
                         {user.userName === user.userId ? (
@@ -290,6 +345,104 @@ function AnalyticsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Drill-down panel for collaborative edits */}
+          {drillDownUserId && (
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-md font-semibold text-gray-900">
+                  📝 Collaborative Edit History - {data.users.find(u => u.userId === drillDownUserId)?.userName}
+                </h3>
+                <button
+                  onClick={() => setDrillDownUserId(null)}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  ✕ Close
+                </button>
+              </div>
+
+              {drillDownLoading ? (
+                <div className="py-8 text-center text-gray-500">Loading edit history...</div>
+              ) : drillDownData && drillDownData.length > 0 ? (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {drillDownData.map((edit) => (
+                    <div
+                      key={edit.id}
+                      className={`rounded-lg border p-4 ${
+                        edit.fixedValidationError
+                          ? 'border-green-300 bg-green-50'
+                          : edit.introducedValidationError
+                          ? 'border-red-300 bg-red-50'
+                          : edit.editType === 'extend'
+                          ? 'border-blue-200 bg-blue-50'
+                          : 'border-gray-200 bg-gray-50'
+                      }`}
+                    >
+                      <div className="mb-2 flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-gray-900">{edit.fieldId}</span>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              edit.editType === 'extend'
+                                ? 'bg-blue-100 text-blue-800'
+                                : edit.editType === 'replace'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {edit.editType}
+                            </span>
+                            {edit.fixedValidationError && (
+                              <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
+                                ✓ Fixed Error
+                              </span>
+                            )}
+                            {edit.introducedValidationError && (
+                              <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                                ✗ Broke Field
+                              </span>
+                            )}
+                          </div>
+                          {edit.previousUserName && (
+                            <div className="text-xs text-gray-600 mb-2">
+                              After <span className="font-medium">{edit.previousUserName}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(edit.timestamp * 1000).toLocaleString()}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <div className="mb-1 text-xs font-semibold text-gray-600">Before:</div>
+                          <div className="rounded bg-white p-2 font-mono text-xs text-gray-700 border border-gray-200">
+                            {edit.valueBefore || <span className="italic text-gray-400">empty</span>}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="mb-1 text-xs font-semibold text-gray-600">After:</div>
+                          <div className="rounded bg-white p-2 font-mono text-xs text-gray-700 border border-gray-200">
+                            {edit.valueAfter || <span className="italic text-gray-400">empty</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-4 text-xs text-gray-600">
+                        <span>Session: {edit.sessionId}</span>
+                        <span>Route: {edit.route}</span>
+                        <span>Change: {edit.valueChangePercent}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-gray-500">
+                  No collaborative edits found for this user
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Collaboration Analysis */}
