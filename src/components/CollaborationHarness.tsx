@@ -428,7 +428,18 @@ export function CollaborationHarness({
     } else {
       setNativeInputValue(el, value)
     }
-  }, [])
+
+    // Check validity after applying value and notify server
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+      const isValid = el.checkValidity()
+      send({
+        type: 'VALIDATION_STATUS',
+        fieldId,
+        hasError: !isValid,
+        errorMessage: isValid ? undefined : el.validationMessage,
+      })
+    }
+  }, [send])
 
   // ------------------------------------------------------------------
   // Highlight a field as containing a draft suggestion
@@ -1595,6 +1606,15 @@ export function CollaborationHarness({
       fieldActivityTimestamps.current[fieldId] = timestamp // Update our own activity
 
       send({ type: 'UPDATE_FIELD', fieldId, value: target.value, timestamp })
+
+      // Check validity after local update and notify server
+      const isValid = target.checkValidity()
+      send({
+        type: 'VALIDATION_STATUS',
+        fieldId,
+        hasError: !isValid,
+        errorMessage: isValid ? undefined : target.validationMessage,
+      })
 
       // Broadcast activity periodically (max once per second) so others know we're typing
       const lastBroadcast = lastActivityBroadcast[fieldId] || 0
