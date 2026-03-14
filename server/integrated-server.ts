@@ -237,6 +237,9 @@ class Room {
           // Check validation state before and potentially after edit
           const hadValidationError = this.validationErrors.get(msg.fieldId)?.hasError || false
 
+          // Calculate duration since last edit
+          const editDurationMs = msg.timestamp - existing.updatedAt
+
           // Send collaborative edit event to telemetry
           setImmediate(async () => {
             try {
@@ -249,7 +252,8 @@ class Room {
                 msg.value,
                 existing.updatedBy,
                 previousUser?.name || existing.updatedBy,
-                hadValidationError
+                hadValidationError,
+                editDurationMs
               )
             } catch (error) {
               console.error('[Server] Error tracking collaborative edit:', error)

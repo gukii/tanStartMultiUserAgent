@@ -430,7 +430,7 @@ export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
 
       const whereClause = conditions.join(' AND ')
 
-      // Query collaborative edits with details
+      // Query collaborative edits with details including session metadata
       const result = await db.execute({
         sql: `
           SELECT
@@ -449,13 +449,15 @@ export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
             ce.fixed_validation_error as fixedValidationError,
             ce.introduced_validation_error as introducedValidationError,
             ce.value_change_percent as valueChangePercent,
+            ce.edit_duration_ms as editDurationMs,
             s.route,
             s.submit_mode as submitMode,
-            s.outcome
+            s.outcome,
+            s.started_at as sessionStartedAt
           FROM telemetry_collaborative_edits ce
           JOIN telemetry_sessions s ON ce.session_id = s.id
           WHERE ${whereClause}
-          ORDER BY ce.timestamp DESC
+          ORDER BY s.started_at DESC, ce.timestamp ASC
           LIMIT 100
         `,
         args,
@@ -477,6 +479,8 @@ export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
         fixedValidationError: Boolean(row.fixedValidationError),
         introducedValidationError: Boolean(row.introducedValidationError),
         valueChangePercent: Number(row.valueChangePercent) || 0,
+        editDurationMs: row.editDurationMs ? Number(row.editDurationMs) : null,
+        sessionStartedAt: Number(row.sessionStartedAt),
         route: String(row.route),
         submitMode: String(row.submitMode),
         outcome: row.outcome ? String(row.outcome) : null,

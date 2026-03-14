@@ -492,7 +492,8 @@ export class TelemetryHandler {
     valueAfter: string,
     previousUserId: string,
     previousUserName: string,
-    hadValidationError: boolean = false
+    hadValidationError: boolean = false,
+    editDurationMs: number = 0
   ): Promise<void> {
     const sessionId = roomId;
 
@@ -506,9 +507,10 @@ export class TelemetryHandler {
     // Calculate metrics
     const valueChangePercent = this.calculateValueChangePercent(valueBefore, valueAfter);
 
-    // Sanitize values based on PII mode
-    const sanitizedBefore = sanitizeValue(valueBefore, PII_MODE);
-    const sanitizedAfter = sanitizeValue(valueAfter, PII_MODE);
+    // For collaborative edits, capture actual values to enable meaningful drill-down analysis
+    // In production, this could be configurable per-session or per-field
+    const sanitizedBefore = sanitizeValue(valueBefore, 'capture');
+    const sanitizedAfter = sanitizeValue(valueAfter, 'capture');
 
     // Store collaborative edit
     await telemetryDb.insert(telemetryCollaborativeEdits).values({
@@ -527,7 +529,7 @@ export class TelemetryHandler {
       hadValidationError, // Passed from server based on validation state
       fixedValidationError: false, // Will be updated retroactively via markValidationFixed
       introducedValidationError: false, // Will be updated retroactively via markValidationIntroduced
-      editDurationMs: null, // Could track based on timestamps
+      editDurationMs: editDurationMs > 0 ? editDurationMs : null,
       valueChangePercent,
     });
 

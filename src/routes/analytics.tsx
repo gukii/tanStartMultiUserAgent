@@ -87,9 +87,11 @@ interface CollaborativeEdit {
   fixedValidationError: boolean
   introducedValidationError: boolean
   valueChangePercent: number
+  editDurationMs: number | null
   route: string
   submitMode: string
   outcome: string | null
+  sessionStartedAt: number
 }
 
 function AnalyticsPage() {
@@ -146,6 +148,39 @@ function AnalyticsPage() {
 
   const handleUserClick = (userId: string) => {
     setDrillDownUserId(userId === drillDownUserId ? null : userId)
+  }
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  }
+
+  const truncateText = (text: string, maxLength: number = 40) => {
+    if (text.length <= maxLength) return text
+    return text.slice(0, maxLength) + '...'
+  }
+
+  // Group edits by session for compact display
+  const groupEditsBySession = (edits: CollaborativeEdit[]) => {
+    const sessions = new Map<string, {
+      sessionId: string
+      route: string
+      sessionStartedAt: number
+      edits: CollaborativeEdit[]
+    }>()
+
+    edits.forEach(edit => {
+      if (!sessions.has(edit.sessionId)) {
+        sessions.set(edit.sessionId, {
+          sessionId: edit.sessionId,
+          route: edit.route,
+          sessionStartedAt: edit.sessionStartedAt,
+          edits: []
+        })
+      }
+      sessions.get(edit.sessionId)!.edits.push(edit)
+    })
+
+    return Array.from(sessions.values())
   }
 
   if (loading) {
@@ -364,74 +399,99 @@ function AnalyticsPage() {
               {drillDownLoading ? (
                 <div className="py-8 text-center text-gray-500">Loading edit history...</div>
               ) : drillDownData && drillDownData.length > 0 ? (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {drillDownData.map((edit) => (
-                    <div
-                      key={edit.id}
-                      className={`rounded-lg border p-4 ${
-                        edit.fixedValidationError
-                          ? 'border-green-300 bg-green-50'
-                          : edit.introducedValidationError
-                          ? 'border-red-300 bg-red-50'
-                          : edit.editType === 'extend'
-                          ? 'border-blue-200 bg-blue-50'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                    >
-                      <div className="mb-2 flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-gray-900">{edit.fieldId}</span>
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
-                              edit.editType === 'extend'
-                                ? 'bg-blue-100 text-blue-800'
-                                : edit.editType === 'replace'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {edit.editType}
-                            </span>
-                            {edit.fixedValidationError && (
-                              <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
-                                ✓ Fixed Error
-                              </span>
-                            )}
-                            {edit.introducedValidationError && (
-                              <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
-                                ✗ Broke Field
-                              </span>
-                            )}
-                          </div>
-                          {edit.previousUserName && (
-                            <div className="text-xs text-gray-600 mb-2">
-                              After <span className="font-medium">{edit.previousUserName}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(edit.timestamp * 1000).toLocaleString()}
-                        </div>
+                <div className="max-h-96 overflow-y-auto">
+                  {groupEditsBySession(drillDownData).map((session) => (
+                    <div key={session.sessionId} className="mb-6">
+                      {/* Session Header */}
+                      <div className="mb-2 flex items-center gap-3 text-sm">
+                        <span className="font-semibold text-gray-700">
+                          {new Date(session.sessionStartedAt * 1000).toLocaleDateString()} {new Date(session.sessionStartedAt * 1000).toLocaleTimeString()}
+                        </span>
+                        <span className="text-gray-500">•</span>
+                        <span className="text-gray-600">{session.route}</span>
+                        <span className="text-gray-500">•</span>
+                        <span className="text-gray-500 text-xs">{session.sessionId}</span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <div className="mb-1 text-xs font-semibold text-gray-600">Before:</div>
-                          <div className="rounded bg-white p-2 font-mono text-xs text-gray-700 border border-gray-200">
-                            {edit.valueBefore || <span className="italic text-gray-400">empty</span>}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-1 text-xs font-semibold text-gray-600">After:</div>
-                          <div className="rounded bg-white p-2 font-mono text-xs text-gray-700 border border-gray-200">
-                            {edit.valueAfter || <span className="italic text-gray-400">empty</span>}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 flex items-center gap-4 text-xs text-gray-600">
-                        <span>Session: {edit.sessionId}</span>
-                        <span>Route: {edit.route}</span>
-                        <span>Change: {edit.valueChangePercent}%</span>
+                      {/* Edits Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs border border-gray-200">
+                          <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                              <th className="px-2 py-1.5 text-left font-semibold text-gray-700">Time</th>
+                              <th className="px-2 py-1.5 text-left font-semibold text-gray-700">Field</th>
+                              <th className="px-2 py-1.5 text-left font-semibold text-gray-700">Action</th>
+                              <th className="px-2 py-1.5 text-left font-semibold text-gray-700">From</th>
+                              <th className="px-2 py-1.5 text-left font-semibold text-gray-700">Before</th>
+                              <th className="px-2 py-1.5 text-left font-semibold text-gray-700">After</th>
+                              <th className="px-2 py-1.5 text-center font-semibold text-gray-700">Δ%</th>
+                              <th className="px-2 py-1.5 text-center font-semibold text-gray-700">Dur</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {session.edits.map((edit) => (
+                              <tr
+                                key={edit.id}
+                                className={`border-b border-gray-100 ${
+                                  edit.fixedValidationError
+                                    ? 'bg-green-50'
+                                    : edit.introducedValidationError
+                                    ? 'bg-red-50'
+                                    : 'hover:bg-gray-50'
+                                }`}
+                              >
+                                <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">
+                                  {new Date(edit.timestamp * 1000).toLocaleTimeString()}
+                                </td>
+                                <td className="px-2 py-1.5 text-gray-700 font-medium">
+                                  {edit.fieldId}
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${
+                                    edit.editType === 'extend'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : edit.editType === 'replace'
+                                      ? 'bg-purple-100 text-purple-800'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {edit.editType}
+                                  </span>
+                                  {edit.fixedValidationError && (
+                                    <span className="ml-1 inline-block rounded bg-green-100 px-1.5 py-0.5 text-xs font-semibold text-green-800">
+                                      ✓
+                                    </span>
+                                  )}
+                                  {edit.introducedValidationError && (
+                                    <span className="ml-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-800">
+                                      ✗
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-gray-600">
+                                  {edit.previousUserName ? (
+                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-xs font-semibold" title={edit.previousUserName}>
+                                      {getInitials(edit.previousUserName)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 italic">new</span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-gray-700 font-mono max-w-xs" title={edit.valueBefore}>
+                                  {edit.valueBefore ? truncateText(edit.valueBefore, 30) : <span className="italic text-gray-400">empty</span>}
+                                </td>
+                                <td className="px-2 py-1.5 text-gray-700 font-mono max-w-xs" title={edit.valueAfter}>
+                                  {edit.valueAfter ? truncateText(edit.valueAfter, 30) : <span className="italic text-gray-400">empty</span>}
+                                </td>
+                                <td className="px-2 py-1.5 text-center text-gray-600">
+                                  {edit.valueChangePercent}%
+                                </td>
+                                <td className="px-2 py-1.5 text-center text-gray-600 whitespace-nowrap">
+                                  {edit.editDurationMs ? `${(edit.editDurationMs / 1000).toFixed(1)}s` : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   ))}
