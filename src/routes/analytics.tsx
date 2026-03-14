@@ -13,7 +13,7 @@
 
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { getAnalytics, getCollaborativeEditDetails } from '../lib/analytics.server'
+import { getAnalytics, getCollaborativeEditDetails, getSubmissionCycles, getActionSequences } from '../lib/analytics.server'
 
 export const Route = createFileRoute('/analytics')({
   component: AnalyticsPage,
@@ -94,6 +94,49 @@ interface CollaborativeEdit {
   sessionStartedAt: number
 }
 
+interface SubmissionCycle {
+  id: string
+  sessionId: string
+  roomId: string
+  route: string
+  startedAt: number
+  submittedAt: number
+  durationMs: number
+  submittedBy: string
+  submittedByName: string
+  totalParticipants: number
+  totalFields: number
+  totalActions: number
+  actionsNew: number
+  actionsExtend: number
+  actionsReplace: number
+  actionsShorten: number
+  errorsFixed: number
+  errorsBroke: number
+  accuracy: number
+  collaborationScore: number
+}
+
+interface ActionSequence {
+  id: number
+  fieldId: string
+  timestamp: number
+  completedAt: number
+  durationMs: number
+  userId: string
+  userName: string
+  previousUserId: string | null
+  previousUserName: string | null
+  valueBefore: string
+  valueAfter: string
+  actionType: string
+  hadValidationError: boolean
+  fixedValidationError: boolean
+  introducedValidationError: boolean
+  keystrokeCount: number
+  valueChangePercent: number
+}
+
 function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -104,6 +147,13 @@ function AnalyticsPage() {
   const [drillDownUserId, setDrillDownUserId] = useState<string | null>(null)
   const [drillDownData, setDrillDownData] = useState<CollaborativeEdit[] | null>(null)
   const [drillDownLoading, setDrillDownLoading] = useState(false)
+
+  // Submission cycles state
+  const [submissionCycles, setSubmissionCycles] = useState<SubmissionCycle[] | null>(null)
+  const [cyclesLoading, setCyclesLoading] = useState(false)
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
+  const [actionSequences, setActionSequences] = useState<ActionSequence[] | null>(null)
+  const [actionsLoading, setActionsLoading] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
@@ -146,12 +196,54 @@ function AnalyticsPage() {
     fetchDrillDown()
   }, [drillDownUserId, timeRange])
 
+  // Fetch submission cycles
+  useEffect(() => {
+    async function fetchCycles() {
+      try {
+        setCyclesLoading(true)
+        const result = await getSubmissionCycles({ data: { timeRange } })
+        setSubmissionCycles(result.cycles)
+      } catch (err) {
+        console.error('[Analytics] Submission cycles fetch error:', err)
+      } finally {
+        setCyclesLoading(false)
+      }
+    }
+    fetchCycles()
+  }, [timeRange])
+
+  // Fetch action sequences when cycle is selected
+  useEffect(() => {
+    async function fetchActions() {
+      if (!selectedCycleId) {
+        setActionSequences(null)
+        return
+      }
+
+      try {
+        setActionsLoading(true)
+        const result = await getActionSequences({ data: { cycleId: selectedCycleId } })
+        setActionSequences(result.actions)
+      } catch (err) {
+        console.error('[Analytics] Action sequences fetch error:', err)
+      } finally {
+        setActionsLoading(false)
+      }
+    }
+    fetchActions()
+  }, [selectedCycleId])
+
   const handleUserClick = (userId: string) => {
     setDrillDownUserId(userId === drillDownUserId ? null : userId)
   }
 
+  const handleCycleClick = (cycleId: string) => {
+    setSelectedCycleId(cycleId === selectedCycleId ? null : cycleId)
+  }
+
   const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    // Return first 3 letters of name (e.g., "Robert" -> "Rob")
+    return name.slice(0, 3).charAt(0).toUpperCase() + name.slice(1, 3).toLowerCase()
   }
 
   const truncateText = (text: string, maxLength: number = 40) => {
@@ -579,6 +671,173 @@ function AnalyticsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Form Submission Cycles */}
+        <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">📋 Form Submission Cycles</h2>
+          <p className="mb-4 text-sm text-gray-600">
+            Individual form completion instances with metrics and collaborative action history
+          </p>
+
+          {cyclesLoading ? (
+            <div className="py-8 text-center text-gray-500">Loading submission cycles...</div>
+          ) : submissionCycles && submissionCycles.length > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-gray-200 bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Time</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Submitted By</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Duration</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Fields</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Extended</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Replaced</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Fixed</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Broke</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Accuracy</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {submissionCycles.map((cycle) => (
+                      <>
+                        <tr
+                          key={cycle.id}
+                          onClick={() => handleCycleClick(cycle.id)}
+                          className="cursor-pointer hover:bg-gray-50 transition-colors"
+                        >
+                          <td className="px-4 py-3 text-gray-900">
+                            {new Date(cycle.submittedAt * 1000).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700">
+                                {getInitials(cycle.submittedByName)}
+                              </div>
+                              <span className="text-gray-900">{cycle.submittedByName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {(cycle.durationMs / 1000).toFixed(1)}s
+                          </td>
+                          <td className="px-4 py-3 text-gray-900 font-medium">
+                            {cycle.totalFields}
+                          </td>
+                          <td className="px-4 py-3 text-green-600 font-medium">
+                            {cycle.actionsExtend}
+                          </td>
+                          <td className="px-4 py-3 text-blue-600 font-medium">
+                            {cycle.actionsReplace}
+                          </td>
+                          <td className="px-4 py-3 text-emerald-600 font-medium">
+                            {cycle.errorsFixed}
+                          </td>
+                          <td className="px-4 py-3 text-red-600 font-medium">
+                            {cycle.errorsBroke}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`font-semibold ${cycle.accuracy >= 80 ? 'text-green-600' : cycle.accuracy >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
+                              {cycle.accuracy.toFixed(0)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`font-semibold ${cycle.collaborationScore >= 80 ? 'text-green-600' : cycle.collaborationScore >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
+                              {cycle.collaborationScore.toFixed(0)}
+                            </span>
+                          </td>
+                        </tr>
+
+                        {/* Drill-down: Action sequences for this cycle */}
+                        {selectedCycleId === cycle.id && (
+                          <tr>
+                            <td colSpan={10} className="bg-gray-50 px-4 py-4">
+                              {actionsLoading ? (
+                                <div className="py-4 text-center text-gray-500">Loading actions...</div>
+                              ) : actionSequences && actionSequences.length > 0 ? (
+                                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                                  <h3 className="mb-3 text-sm font-semibold text-gray-900">
+                                    Collaborative Action History
+                                  </h3>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-xs">
+                                      <thead className="border-b border-gray-200 bg-gray-50">
+                                        <tr>
+                                          <th className="px-3 py-2 font-semibold text-gray-700">Time</th>
+                                          <th className="px-3 py-2 font-semibold text-gray-700">Field</th>
+                                          <th className="px-3 py-2 font-semibold text-gray-700">Action</th>
+                                          <th className="px-3 py-2 font-semibold text-gray-700">Before</th>
+                                          <th className="px-3 py-2 font-semibold text-gray-700">After</th>
+                                          <th className="px-3 py-2 font-semibold text-gray-700">Δ%</th>
+                                          <th className="px-3 py-2 font-semibold text-gray-700">Duration</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                        {actionSequences.map((action) => (
+                                          <tr key={action.id} className="hover:bg-gray-50">
+                                            <td className="px-3 py-2 text-gray-600">
+                                              {new Date(action.timestamp * 1000).toLocaleTimeString()}
+                                            </td>
+                                            <td className="px-3 py-2 text-gray-900 font-medium">
+                                              {action.fieldId}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                              <div className="flex items-center gap-1">
+                                                <span className="font-semibold text-violet-600">
+                                                  {getInitials(action.userName)}:
+                                                </span>
+                                                <span className={`font-medium ${
+                                                  action.actionType === 'extend' ? 'text-green-600' :
+                                                  action.actionType === 'replace' ? 'text-blue-600' :
+                                                  action.actionType === 'new' ? 'text-purple-600' :
+                                                  'text-gray-600'
+                                                }`}>
+                                                  {action.actionType}
+                                                </span>
+                                                {action.fixedValidationError && (
+                                                  <span className="text-green-600 ml-1">✓</span>
+                                                )}
+                                                {action.introducedValidationError && (
+                                                  <span className="text-red-600 ml-1">✗</span>
+                                                )}
+                                              </div>
+                                            </td>
+                                            <td className="px-3 py-2 text-gray-600 max-w-xs truncate" title={action.valueBefore}>
+                                              {truncateText(action.valueBefore, 30)}
+                                            </td>
+                                            <td className="px-3 py-2 text-gray-900 max-w-xs truncate font-medium" title={action.valueAfter}>
+                                              {truncateText(action.valueAfter, 30)}
+                                            </td>
+                                            <td className="px-3 py-2 text-gray-600">
+                                              {action.valueChangePercent}%
+                                            </td>
+                                            <td className="px-3 py-2 text-gray-600">
+                                              {(action.durationMs / 1000).toFixed(1)}s
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="py-4 text-center text-gray-500">No actions recorded</div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No submission cycles found. Complete and submit a form to see data here.
+            </div>
+          )}
         </div>
 
         {/* Learning Curve Visualization */}

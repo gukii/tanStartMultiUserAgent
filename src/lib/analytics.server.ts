@@ -8,6 +8,14 @@ import { createServerFn } from '@tanstack/react-start'
 import { createClient } from '@libsql/client'
 import path from 'node:path'
 
+// Helper to get database connection
+function getDb() {
+  const dbPath = path.join(process.cwd(), 'data', 'telemetry.db')
+  return createClient({
+    url: `file:${dbPath}`,
+  })
+}
+
 interface UserMetrics {
   userId: string
   userName: string
@@ -490,5 +498,165 @@ export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
     } catch (error) {
       console.error('[Analytics] Error fetching collaborative edit details:', error)
       throw new Error('Failed to fetch collaborative edit details')
+    }
+  })
+
+/**
+ * Get form submission cycles (individual form completion instances)
+ */
+export const getSubmissionCycles = createServerFn({ method: 'GET' })
+  .inputValidator((data: { timeRange?: string }) => {
+    return {
+      timeRange: (data.timeRange && ['1h', '24h', '7d', '30d'].includes(data.timeRange))
+        ? data.timeRange as '1h' | '24h' | '7d' | '30d'
+        : '24h',
+    }
+  })
+  .handler(async ({ data }) => {
+    const options = data
+
+    try {
+      const db = getDb()
+
+      // Calculate time filter
+      const now = Date.now() / 1000
+      const timeRanges = {
+        '1h': now - 3600,
+        '24h': now - 86400,
+        '7d': now - 604800,
+        '30d': now - 2592000,
+      }
+      const startTime = timeRanges[options.timeRange]
+
+      // Query submission cycles with metrics
+      const query = `
+        SELECT
+          sc.id,
+          sc.session_id as sessionId,
+          sc.started_at as startedAt,
+          sc.submitted_at as submittedAt,
+          sc.duration_ms as durationMs,
+          sc.submitted_by as submittedBy,
+          sc.submitted_by_name as submittedByName,
+          sc.total_participants as totalParticipants,
+          sc.total_fields as totalFields,
+          sc.total_actions as totalActions,
+          sc.actions_new as actionsNew,
+          sc.actions_extend as actionsExtend,
+          sc.actions_replace as actionsReplace,
+          sc.actions_shorten as actionsShorten,
+          sc.errors_fixed as errorsFixed,
+          sc.errors_broke as errorsBroke,
+          sc.accuracy,
+          sc.collaboration_score as collaborationScore,
+          s.room_id as roomId,
+          s.route
+        FROM telemetry_submission_cycles sc
+        JOIN telemetry_sessions s ON sc.session_id = s.id
+        WHERE sc.submitted_at IS NOT NULL
+          AND sc.submitted_at >= ?
+        ORDER BY sc.submitted_at DESC
+        LIMIT 100
+      `
+
+      const rows = db.execute({ sql: query, args: [startTime] }).rows as any[]
+
+      const cycles = rows.map(row => ({
+        id: String(row.id),
+        sessionId: String(row.sessionId),
+        roomId: String(row.roomId),
+        route: String(row.route),
+        startedAt: Number(row.startedAt),
+        submittedAt: Number(row.submittedAt),
+        durationMs: Number(row.durationMs) || 0,
+        submittedBy: String(row.submittedBy),
+        submittedByName: String(row.submittedByName),
+        totalParticipants: Number(row.totalParticipants),
+        totalFields: Number(row.totalFields),
+        totalActions: Number(row.totalActions),
+        actionsNew: Number(row.actionsNew),
+        actionsExtend: Number(row.actionsExtend),
+        actionsReplace: Number(row.actionsReplace),
+        actionsShorten: Number(row.actionsShorten),
+        errorsFixed: Number(row.errorsFixed),
+        errorsBroke: Number(row.errorsBroke),
+        accuracy: Number(row.accuracy) || 0,
+        collaborationScore: Number(row.collaborationScore) || 0,
+      }))
+
+      return { cycles }
+    } catch (error) {
+      console.error('[Analytics] Error fetching submission cycles:', error)
+      throw new Error('Failed to fetch submission cycles')
+    }
+  })
+
+/**
+ * Get action sequences for a specific submission cycle (drill-down)
+ */
+export const getActionSequences = createServerFn({ method: 'GET' })
+  .inputValidator((data: { cycleId: string }) => {
+    if (!data.cycleId || typeof data.cycleId !== 'string') {
+      throw new Error('cycleId is required')
+    }
+    return { cycleId: data.cycleId }
+  })
+  .handler(async ({ data }) => {
+    const { cycleId } = data
+
+    try {
+      const db = getDb()
+
+      // Query action sequences for this cycle
+      const query = `
+        SELECT
+          a.id,
+          a.field_id as fieldId,
+          a.timestamp,
+          a.completed_at as completedAt,
+          a.duration_ms as durationMs,
+          a.user_id as userId,
+          a.user_name as userName,
+          a.previous_user_id as previousUserId,
+          a.previous_user_name as previousUserName,
+          a.value_before as valueBefore,
+          a.value_after as valueAfter,
+          a.action_type as actionType,
+          a.had_validation_error as hadValidationError,
+          a.fixed_validation_error as fixedValidationError,
+          a.introduced_validation_error as introducedValidationError,
+          a.keystroke_count as keystrokeCount,
+          a.value_change_percent as valueChangePercent
+        FROM telemetry_action_sequences a
+        WHERE a.submission_cycle_id = ?
+        ORDER BY a.timestamp ASC
+      `
+
+      const rows = db.execute({ sql: query, args: [cycleId] }).rows as any[]
+
+      const actions = rows.map(row => ({
+        id: Number(row.id),
+        fieldId: String(row.fieldId),
+        timestamp: Number(row.timestamp),
+        completedAt: Number(row.completedAt),
+        durationMs: Number(row.durationMs) || 0,
+        userId: String(row.userId),
+        userName: String(row.userName),
+        previousUserId: row.previousUserId ? String(row.previousUserId) : null,
+        previousUserName: row.previousUserName ? String(row.previousUserName) : null,
+        valueBefore: String(row.valueBefore || ''),
+        valueAfter: String(row.valueAfter || ''),
+        actionType: String(row.actionType),
+        hadValidationError: Boolean(row.hadValidationError),
+        fixedValidationError: Boolean(row.fixedValidationError),
+        introducedValidationError: Boolean(row.introducedValidationError),
+        keystrokeCount: Number(row.keystrokeCount),
+        valueChangePercent: Number(row.valueChangePercent) || 0,
+      }))
+
+      return { actions }
+    } catch (error) {
+      console.error('[Analytics] Error fetching action sequences:', error)
+      throw new Error('Failed to fetch action sequences')
     }
   })

@@ -385,3 +385,94 @@ export type NewTelemetryPerformanceMetric = typeof telemetryPerformanceMetrics.$
 
 export type TelemetryCollaborativeEdit = typeof telemetryCollaborativeEdits.$inferSelect;
 export type NewTelemetryCollaborativeEdit = typeof telemetryCollaborativeEdits.$inferInsert;
+
+// ============================================================================
+// 12. Action Sequences - Grouped keystroke sequences into complete actions
+// ============================================================================
+export const telemetryActionSequences = sqliteTable('telemetry_action_sequences', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  sessionId: text('session_id').notNull().references(() => telemetrySessions.id, { onDelete: 'cascade' }),
+  submissionCycleId: text('submission_cycle_id'), // Links edits to specific form submission cycles
+  fieldId: text('field_id').notNull(),
+
+  // Action metadata
+  timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(), // When action started
+  completedAt: integer('completed_at', { mode: 'timestamp' }), // When action completed
+  durationMs: integer('duration_ms'), // Total duration of the complete action sequence
+
+  // User who performed the action
+  participantId: integer('participant_id').notNull().references(() => telemetryParticipants.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  userName: text('user_name').notNull(),
+
+  // Action details
+  valueBefore: text('value_before'), // Initial value when action started
+  valueAfter: text('value_after'), // Final value when action completed
+  actionType: text('action_type').notNull(), // 'new', 'extend', 'replace', 'shorten', 'clear'
+
+  // Previous editor (for collaborative analysis)
+  previousParticipantId: integer('previous_participant_id').references(() => telemetryParticipants.id, { onDelete: 'set null' }),
+  previousUserId: text('previous_user_id'),
+  previousUserName: text('previous_user_name'),
+
+  // Error tracking
+  hadValidationError: integer('had_validation_error', { mode: 'boolean' }).notNull().default(false),
+  fixedValidationError: integer('fixed_validation_error', { mode: 'boolean' }).notNull().default(false),
+  introducedValidationError: integer('introduced_validation_error', { mode: 'boolean' }).notNull().default(false),
+
+  // Metrics
+  keystrokeCount: integer('keystroke_count').notNull().default(0), // Number of individual edits in this sequence
+  valueChangePercent: integer('value_change_percent'), // % of characters changed (0-100)
+}, (table) => ({
+  sessionIdx: index('idx_telemetry_action_sequences_session').on(table.sessionId),
+  submissionCycleIdx: index('idx_telemetry_action_sequences_cycle').on(table.submissionCycleId),
+  fieldIdx: index('idx_telemetry_action_sequences_field').on(table.fieldId),
+  participantIdx: index('idx_telemetry_action_sequences_participant').on(table.participantId),
+  timestampIdx: index('idx_telemetry_action_sequences_timestamp').on(table.timestamp),
+}));
+
+// ============================================================================
+// 13. Submission Cycles - Track individual form submission instances
+// ============================================================================
+export const telemetrySubmissionCycles = sqliteTable('telemetry_submission_cycles', {
+  id: text('id').primaryKey(), // UUID for submission cycle
+  sessionId: text('session_id').notNull().references(() => telemetrySessions.id, { onDelete: 'cascade' }),
+
+  // Cycle timing
+  startedAt: integer('started_at', { mode: 'timestamp' }).notNull(), // When first field was edited in this cycle
+  submittedAt: integer('submitted_at', { mode: 'timestamp' }), // When form was submitted
+  durationMs: integer('duration_ms'), // Time from first edit to submission
+
+  // Who submitted
+  submittedBy: text('submitted_by'), // userId who submitted the form
+  submittedByName: text('submitted_by_name'), // userName who submitted
+
+  // Metrics
+  totalParticipants: integer('total_participants').notNull().default(0), // How many users contributed
+  totalFields: integer('total_fields').notNull().default(0), // How many fields were edited
+  totalActions: integer('total_actions').notNull().default(0), // Total action sequences
+
+  // Action breakdown
+  actionsNew: integer('actions_new').notNull().default(0),
+  actionsExtend: integer('actions_extend').notNull().default(0),
+  actionsReplace: integer('actions_replace').notNull().default(0),
+  actionsShorten: integer('actions_shorten').notNull().default(0),
+
+  // Error tracking
+  errorsFixed: integer('errors_fixed').notNull().default(0),
+  errorsBroke: integer('errors_broke').notNull().default(0),
+
+  // Quality metrics
+  accuracy: real('accuracy'), // % of fields without errors (0-100)
+  collaborationScore: real('collaboration_score'), // Weighted quality metric (0-100)
+}, (table) => ({
+  sessionIdx: index('idx_telemetry_submission_cycles_session').on(table.sessionId),
+  timestampIdx: index('idx_telemetry_submission_cycles_timestamp').on(table.startedAt),
+  submittedAtIdx: index('idx_telemetry_submission_cycles_submitted').on(table.submittedAt),
+}));
+
+export type TelemetryActionSequence = typeof telemetryActionSequences.$inferSelect;
+export type NewTelemetryActionSequence = typeof telemetryActionSequences.$inferInsert;
+
+export type TelemetrySubmissionCycle = typeof telemetrySubmissionCycles.$inferSelect;
+export type NewTelemetrySubmissionCycle = typeof telemetrySubmissionCycles.$inferInsert;

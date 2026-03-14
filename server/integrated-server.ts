@@ -112,6 +112,24 @@ type IncomingMessage =
 // Room Management (same as standalone WebSocket server)
 // ---------------------------------------------------------------------------
 
+// Edit buffer for grouping keystroke sequences into complete actions
+interface EditBuffer {
+  fieldId: string
+  userId: string
+  userName: string
+  participantId?: number
+  previousUserId?: string
+  previousUserName?: string
+  previousParticipantId?: number
+  initialValue: string
+  currentValue: string
+  startTimestamp: number
+  lastUpdateTimestamp: number
+  keystrokeCount: number
+  flushTimer?: NodeJS.Timeout
+  hadValidationError: boolean
+}
+
 class Room {
   private users = new Map<string, UserInfo>()
   private cursors = new Map<string, CursorState>()
@@ -125,7 +143,214 @@ class Room {
   private validationErrors = new Map<string, { hasError: boolean; errorMessage?: string}>()
   private clients = new Map<string, WebSocket>()
 
+  // Edit buffering for action sequence grouping
+  private editBuffers = new Map<string, EditBuffer>() // key: `${fieldId}:${userId}`
+  private editBufferTimeout = 5000 // Default 5s timeout (configurable per session)
+  private currentSubmissionCycleId: string | null = null
+
   constructor(public roomId: string) {}
+
+  /**
+   * Buffer an edit for eventual grouping into action sequence
+   */
+  private bufferEdit(fieldId: string, userId: string, userName: string, newValue: string, previousValue: string, previousUserId?: string, previousUserName?: string) {
+    const bufferKey = `${fieldId}:${userId}`
+    const now = Date.now()
+
+    // Check if different user is editing - flush their buffer first
+    const otherUserBufferKey = this.findBufferForField(fieldId, userId)
+    if (otherUserBufferKey) {
+      this.flushBuffer(otherUserBufferKey, 'different_user_editing')
+    }
+
+    // Get or create buffer
+    let buffer = this.editBuffers.get(bufferKey)
+
+    if (!buffer) {
+      // Start new buffer
+      buffer = {
+        fieldId,
+        userId,
+        userName,
+        previousUserId,
+        previousUserName,
+        initialValue: previousValue,
+        currentValue: newValue,
+        startTimestamp: now,
+        lastUpdateTimestamp: now,
+        keystrokeCount: 1,
+        hadValidationError: this.validationErrors.get(fieldId)?.hasError || false,
+      }
+      this.editBuffers.set(bufferKey, buffer)
+    } else {
+      // Update existing buffer
+      buffer.currentValue = newValue
+      buffer.lastUpdateTimestamp = now
+      buffer.keystrokeCount++
+
+      // Clear existing timeout
+      if (buffer.flushTimer) {
+        clearTimeout(buffer.flushTimer)
+      }
+    }
+
+    // Set flush timeout
+    buffer.flushTimer = setTimeout(() => {
+      this.flushBuffer(bufferKey, 'timeout')
+    }, this.editBufferTimeout)
+  }
+
+  /**
+   * Find if another user has a buffer for this field
+   */
+  private findBufferForField(fieldId: string, excludeUserId: string): string | null {
+    for (const [key, buffer] of this.editBuffers.entries()) {
+      if (buffer.fieldId === fieldId && buffer.userId !== excludeUserId) {
+        return key
+      }
+    }
+    return null
+  }
+
+  /**
+   * Flush a buffered edit sequence to create grouped action
+   */
+  private async flushBuffer(bufferKey: string, reason: string) {
+    const buffer = this.editBuffers.get(bufferKey)
+    if (!buffer) return
+
+    // Remove from buffers
+    this.editBuffers.delete(bufferKey)
+
+    // Clear timeout if exists
+    if (buffer.flushTimer) {
+      clearTimeout(buffer.flushTimer)
+    }
+
+    // Skip if no actual change
+    if (buffer.initialValue === buffer.currentValue) {
+      console.log(`[Room ${this.roomId}] Skipping empty buffer flush for ${buffer.fieldId} by ${buffer.userName}`)
+      return
+    }
+
+    const durationMs = buffer.lastUpdateTimestamp - buffer.startTimestamp
+
+    console.log(
+      `[Room ${this.roomId}] Flushing buffer for ${buffer.fieldId} by ${buffer.userName} (${reason}): ` +
+      `${buffer.keystrokeCount} keystrokes, ${durationMs}ms, "${buffer.initialValue}" -> "${buffer.currentValue}"`
+    )
+
+    // Ensure submission cycle exists
+    if (!this.currentSubmissionCycleId) {
+      await this.startNewSubmissionCycle()
+    }
+
+    // Determine action type
+    const actionType = this.determineActionType(buffer.initialValue, buffer.currentValue)
+
+    // Store grouped action via telemetry handler
+    setImmediate(async () => {
+      try {
+        await telemetryHandler.trackActionSequence({
+          sessionId: this.roomId,
+          submissionCycleId: this.currentSubmissionCycleId!,
+          fieldId: buffer.fieldId,
+          userId: buffer.userId,
+          userName: buffer.userName,
+          previousUserId: buffer.previousUserId,
+          previousUserName: buffer.previousUserName,
+          valueBefore: buffer.initialValue,
+          valueAfter: buffer.currentValue,
+          actionType,
+          startTimestamp: buffer.startTimestamp,
+          endTimestamp: buffer.lastUpdateTimestamp,
+          durationMs,
+          keystrokeCount: buffer.keystrokeCount,
+          hadValidationError: buffer.hadValidationError,
+        })
+      } catch (error) {
+        console.error('[Room] Error flushing buffer to telemetry:', error)
+      }
+    })
+  }
+
+  /**
+   * Flush all buffers for a specific field (e.g., on blur)
+   */
+  private async flushFieldBuffers(fieldId: string, reason: string) {
+    const buffersToFlush: string[] = []
+
+    for (const [key, buffer] of this.editBuffers.entries()) {
+      if (buffer.fieldId === fieldId) {
+        buffersToFlush.push(key)
+      }
+    }
+
+    for (const key of buffersToFlush) {
+      await this.flushBuffer(key, reason)
+    }
+  }
+
+  /**
+   * Determine action type based on value changes
+   */
+  private determineActionType(before: string, after: string): string {
+    if (!before || before.length === 0) return 'new'
+    if (!after || after.length === 0) return 'clear'
+    if (after.startsWith(before)) return 'extend'
+    if (before.startsWith(after)) return 'shorten'
+    return 'replace'
+  }
+
+  /**
+   * Start a new submission cycle
+   */
+  private async startNewSubmissionCycle() {
+    const cycleId = `cycle_${this.roomId}_${Date.now()}`
+    this.currentSubmissionCycleId = cycleId
+
+    console.log(`[Room ${this.roomId}] Started new submission cycle: ${cycleId}`)
+
+    setImmediate(async () => {
+      try {
+        await telemetryHandler.startSubmissionCycle(this.roomId, cycleId)
+      } catch (error) {
+        console.error('[Room] Error starting submission cycle:', error)
+      }
+    })
+  }
+
+  /**
+   * End current submission cycle and calculate metrics
+   */
+  private async endSubmissionCycle(submittedBy: string, submittedByName: string) {
+    if (!this.currentSubmissionCycleId) return
+
+    // Flush all pending buffers before ending cycle
+    const allBufferKeys = Array.from(this.editBuffers.keys())
+    for (const key of allBufferKeys) {
+      await this.flushBuffer(key, 'form_submission')
+    }
+
+    console.log(`[Room ${this.roomId}] Ending submission cycle: ${this.currentSubmissionCycleId} by ${submittedByName}`)
+
+    setImmediate(async () => {
+      try {
+        await telemetryHandler.endSubmissionCycle(
+          this.roomId,
+          this.currentSubmissionCycleId!,
+          submittedBy,
+          submittedByName
+        )
+      } catch (error) {
+        console.error('[Room] Error ending submission cycle:', error)
+      }
+    })
+
+    // Start new cycle for next form
+    this.currentSubmissionCycleId = null
+    await this.startNewSubmissionCycle()
+  }
 
   addClient(userId: string, ws: WebSocket, queryParams: URLSearchParams) {
     const name = queryParams.get('name') ?? `User-${userId.slice(0, 4)}`
@@ -218,6 +443,9 @@ class Room {
         break
       }
       case 'FIELD_BLUR': {
+        // Flush edit buffers for this field when user leaves it
+        await this.flushFieldBuffers(msg.fieldId, 'field_blur')
+
         const lockOwner = this.fieldLocks.get(msg.fieldId)
         if (lockOwner === userId) {
           this.fieldLocks.delete(msg.fieldId)
@@ -229,18 +457,25 @@ class Room {
         const existing = this.fieldValues.get(msg.fieldId)
         if (existing && msg.timestamp < existing.updatedAt) break
 
-        // Track collaborative edit for telemetry
+        const user = this.users.get(userId)
+        const previousUser = existing ? this.users.get(existing.updatedBy) : undefined
+
+        // Buffer edit for action sequence grouping (replaces immediate telemetry)
+        this.bufferEdit(
+          msg.fieldId,
+          userId,
+          user?.name || userId,
+          msg.value,
+          existing?.value || '',
+          existing?.updatedBy,
+          previousUser?.name
+        )
+
+        // Also keep raw keystroke-level tracking for backwards compatibility
         if (existing && existing.updatedBy !== userId) {
-          const user = this.users.get(userId)
-          const previousUser = this.users.get(existing.updatedBy)
-
-          // Check validation state before and potentially after edit
           const hadValidationError = this.validationErrors.get(msg.fieldId)?.hasError || false
-
-          // Calculate duration since last edit
           const editDurationMs = msg.timestamp - existing.updatedAt
 
-          // Send collaborative edit event to telemetry
           setImmediate(async () => {
             try {
               await telemetryHandler.trackCollaborativeEdit(
@@ -303,12 +538,17 @@ class Room {
         // Broadcast to ALL clients (including the one who initiated)
         this.broadcast({ type: 'FORM_CLEARED' })
         break
-      case 'FORM_SUBMITTED':
+      case 'FORM_SUBMITTED': {
+        // End current submission cycle with metrics
+        const user = this.users.get(userId)
+        await this.endSubmissionCycle(userId, user?.name || userId)
+
         // Broadcast to all other peers that form was submitted
         this.broadcast({ type: 'FORM_SUBMITTED', userId })
         // Clear ready states after submission
         this.readyStates.clear()
         break
+      }
 
       case 'VALIDATION_STATUS': {
         // Track validation error state for collaborative edit analysis

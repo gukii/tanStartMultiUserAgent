@@ -677,6 +677,179 @@ export class TelemetryHandler {
 
     console.log(`[Telemetry] Cleaned up data older than ${retentionDays} days`);
   }
+
+  /**
+   * Track grouped action sequence (replaces keystroke-level tracking)
+   */
+  async trackActionSequence(data: {
+    sessionId: string
+    submissionCycleId: string
+    fieldId: string
+    userId: string
+    userName: string
+    previousUserId?: string
+    previousUserName?: string
+    valueBefore: string
+    valueAfter: string
+    actionType: string
+    startTimestamp: number
+    endTimestamp: number
+    durationMs: number
+    keystrokeCount: number
+    hadValidationError: boolean
+  }): Promise<void> {
+    const sessionId = data.sessionId
+    const participantId = await this.ensureParticipant(sessionId, data.userId, data.userName)
+    const previousParticipantId = data.previousUserId
+      ? await this.ensureParticipant(sessionId, data.previousUserId, data.previousUserName)
+      : null
+
+    // Calculate value change percentage
+    const valueChangePercent = this.calculateValueChangePercent(data.valueBefore, data.valueAfter)
+
+    // Get current validation state for error tracking
+    const validationState = {
+      hadError: data.hadValidationError,
+      fixedError: false,
+      introducedError: false,
+    }
+
+    // Store action sequence
+    await telemetryDb.insert(schemaTelemetry.telemetryActionSequences).values({
+      sessionId,
+      submissionCycleId: data.submissionCycleId,
+      fieldId: data.fieldId,
+      timestamp: new Date(data.startTimestamp),
+      completedAt: new Date(data.endTimestamp),
+      durationMs: data.durationMs,
+      participantId,
+      userId: data.userId,
+      userName: data.userName,
+      previousParticipantId,
+      previousUserId: data.previousUserId,
+      previousUserName: data.previousUserName,
+      valueBefore: sanitizeValue(data.valueBefore, 'capture'),
+      valueAfter: sanitizeValue(data.valueAfter, 'capture'),
+      actionType: data.actionType,
+      hadValidationError: validationState.hadError,
+      fixedValidationError: validationState.fixedError,
+      introducedValidationError: validationState.introducedError,
+      keystrokeCount: data.keystrokeCount,
+      valueChangePercent,
+    })
+
+    console.log(
+      `[Telemetry] Tracked action sequence: ${data.userName} ${data.actionType} ${data.fieldId} ` +
+      `(${data.keystrokeCount} keystrokes, ${data.durationMs}ms)`
+    )
+  }
+
+  /**
+   * Start a new submission cycle
+   */
+  async startSubmissionCycle(sessionId: string, cycleId: string): Promise<void> {
+    await telemetryDb.insert(schemaTelemetry.telemetrySubmissionCycles).values({
+      id: cycleId,
+      sessionId,
+      startedAt: new Date(),
+      totalParticipants: 0,
+      totalFields: 0,
+      totalActions: 0,
+      actionsNew: 0,
+      actionsExtend: 0,
+      actionsReplace: 0,
+      actionsShorten: 0,
+      errorsFixed: 0,
+      errorsBroke: 0,
+    })
+
+    console.log(`[Telemetry] Started submission cycle: ${cycleId}`)
+  }
+
+  /**
+   * End submission cycle and calculate metrics
+   */
+  async endSubmissionCycle(
+    sessionId: string,
+    cycleId: string,
+    submittedBy: string,
+    submittedByName: string
+  ): Promise<void> {
+    // Get all actions for this cycle
+    const actions = await telemetryDb
+      .select()
+      .from(schemaTelemetry.telemetryActionSequences)
+      .where(eq(schemaTelemetry.telemetryActionSequences.submissionCycleId, cycleId))
+
+    if (actions.length === 0) {
+      console.log(`[Telemetry] No actions found for cycle ${cycleId}, skipping metrics`)
+      return
+    }
+
+    // Calculate metrics
+    const participants = new Set(actions.map(a => a.userId))
+    const fields = new Set(actions.map(a => a.fieldId))
+
+    const actionCounts = {
+      new: actions.filter(a => a.actionType === 'new').length,
+      extend: actions.filter(a => a.actionType === 'extend').length,
+      replace: actions.filter(a => a.actionType === 'replace').length,
+      shorten: actions.filter(a => a.actionType === 'shorten').length,
+    }
+
+    const errorsFixed = actions.filter(a => a.fixedValidationError).length
+    const errorsBroke = actions.filter(a => a.introducedValidationError).length
+
+    // Calculate accuracy: % of fields without errors
+    const fieldsWithErrors = new Set(
+      actions.filter(a => a.hadValidationError || a.introducedValidationError).map(a => a.fieldId)
+    )
+    const accuracy = ((fields.size - fieldsWithErrors.size) / fields.size) * 100
+
+    // Calculate collaboration score (weighted formula)
+    // Factors: accuracy (40%), collaboration efficiency (30%), error correction (30%)
+    const collaborationEfficiency = Math.min((participants.size / fields.size) * 100, 100)
+    const errorCorrectionRate = errorsBroke > 0 ? (errorsFixed / (errorsFixed + errorsBroke)) * 100 : 100
+
+    const collaborationScore = (
+      accuracy * 0.4 +
+      collaborationEfficiency * 0.3 +
+      errorCorrectionRate * 0.3
+    )
+
+    // Get start time from first action
+    const startTime = Math.min(...actions.map(a => a.timestamp.getTime()))
+    const endTime = Date.now()
+    const durationMs = endTime - startTime
+
+    // Update cycle with metrics
+    await telemetryDb
+      .update(schemaTelemetry.telemetrySubmissionCycles)
+      .set({
+        submittedAt: new Date(),
+        durationMs,
+        submittedBy,
+        submittedByName,
+        totalParticipants: participants.size,
+        totalFields: fields.size,
+        totalActions: actions.length,
+        actionsNew: actionCounts.new,
+        actionsExtend: actionCounts.extend,
+        actionsReplace: actionCounts.replace,
+        actionsShorten: actionCounts.shorten,
+        errorsFixed,
+        errorsBroke,
+        accuracy,
+        collaborationScore,
+      })
+      .where(eq(schemaTelemetry.telemetrySubmissionCycles.id, cycleId))
+
+    console.log(
+      `[Telemetry] Ended submission cycle ${cycleId}: ` +
+      `${participants.size} participants, ${fields.size} fields, ${actions.length} actions, ` +
+      `accuracy: ${accuracy.toFixed(1)}%, score: ${collaborationScore.toFixed(1)}`
+    )
+  }
 }
 
 // Singleton instance
