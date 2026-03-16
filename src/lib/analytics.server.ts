@@ -108,22 +108,23 @@ export const getAnalytics = createServerFn({ method: 'GET' })
       // Convert to seconds for database comparison (telemetry stores Unix timestamps in seconds)
       const startTime = Math.floor(startTimeMs / 1000)
 
-    // Query user metrics (filter by field activity time, not join time)
+    // Query user metrics using action sequences (new approach)
+    // Fall back to field sessions if no action sequences exist (backward compatibility)
     const userResult = await db.execute({
       sql: `
         SELECT
           p.user_id as userId,
           p.user_name as userName,
           COUNT(DISTINCT p.session_id) as totalSessions,
-          COUNT(DISTINCT fs.field_id) as totalFields,
-          SUM(CASE WHEN fs.had_validation_error = 1 THEN 1 ELSE 0 END) as totalValidationErrors,
-          SUM(CASE WHEN fs.ai_draft_accepted = 1 THEN 1 ELSE 0 END) as aiDraftsAccepted,
-          SUM(CASE WHEN fs.ai_draft_offered = 1 AND fs.ai_draft_accepted = 0 THEN 1 ELSE 0 END) as aiDraftsRejected,
-          AVG(fs.duration_ms) as avgDurationMs,
-          COUNT(fs.id) as totalFieldSessions
+          COUNT(DISTINCT a.field_id) as totalFields,
+          SUM(CASE WHEN a.had_validation_error = 1 OR a.introduced_validation_error = 1 THEN 1 ELSE 0 END) as totalValidationErrors,
+          0 as aiDraftsAccepted,
+          0 as aiDraftsRejected,
+          AVG(a.duration_ms) as avgDurationMs,
+          COUNT(a.id) as totalActions
         FROM telemetry_participants p
-        INNER JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
-        WHERE fs.focused_at >= ?
+        INNER JOIN telemetry_action_sequences a ON p.id = a.participant_id
+        WHERE a.timestamp >= ?
         GROUP BY p.user_id, p.user_name
         HAVING totalFields > 0
         ORDER BY totalFields DESC
@@ -306,11 +307,11 @@ async function getCollaborativeMetrics(
   const result = await db.execute({
     sql: `
       SELECT
-        SUM(CASE WHEN edit_type = 'extend' THEN 1 ELSE 0 END) as fieldsExtended,
-        SUM(CASE WHEN edit_type = 'replace' THEN 1 ELSE 0 END) as fieldsReplaced,
+        SUM(CASE WHEN action_type = 'extend' THEN 1 ELSE 0 END) as fieldsExtended,
+        SUM(CASE WHEN action_type = 'replace' THEN 1 ELSE 0 END) as fieldsReplaced,
         SUM(CASE WHEN fixed_validation_error = 1 THEN 1 ELSE 0 END) as errorsFixed,
         SUM(CASE WHEN introduced_validation_error = 1 THEN 1 ELSE 0 END) as errorsIntroduced
-      FROM telemetry_collaborative_edits
+      FROM telemetry_action_sequences
       WHERE user_id = ? AND timestamp >= ?
     `,
     args: [userId, startTime],
@@ -356,11 +357,11 @@ async function calculateImprovementRate(
     sql: `
       SELECT
         p.joined_at,
-        AVG(fs.duration_ms) as avgDuration,
-        COUNT(fs.had_validation_error) as errors,
+        AVG(a.duration_ms) as avgDuration,
+        COUNT(CASE WHEN a.had_validation_error = 1 OR a.introduced_validation_error = 1 THEN 1 END) as errors,
         COUNT(*) as fields
       FROM telemetry_participants p
-      LEFT JOIN telemetry_field_sessions fs ON p.id = fs.participant_id
+      LEFT JOIN telemetry_action_sequences a ON p.id = a.participant_id
       WHERE p.user_id = ? AND p.joined_at >= ?
       GROUP BY p.session_id
       ORDER BY p.joined_at ASC

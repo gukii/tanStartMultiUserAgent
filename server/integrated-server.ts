@@ -358,6 +358,14 @@ class Room {
     this.users.set(userId, user)
     this.clients.set(userId, ws)
 
+    // Start submission cycle if this is the first client in the room
+    if (this.users.size === 1 && !this.currentSubmissionCycleId) {
+      console.log(`[Room ${this.roomId}] First client connected, starting initial submission cycle`)
+      this.startNewSubmissionCycle().catch(err => {
+        console.error('[Room] Error starting initial submission cycle:', err)
+      })
+    }
+
     const snapshot: RoomState = {
       users: Object.fromEntries(this.users),
       cursors: Object.fromEntries(this.cursors),
