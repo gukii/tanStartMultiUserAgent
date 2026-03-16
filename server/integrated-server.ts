@@ -248,30 +248,28 @@ class Room {
     // Determine action type
     const actionType = this.determineActionType(buffer.initialValue, buffer.currentValue)
 
-    // Store grouped action via telemetry handler
-    setImmediate(async () => {
-      try {
-        await telemetryHandler.trackActionSequence({
-          sessionId: this.roomId,
-          submissionCycleId: this.currentSubmissionCycleId!,
-          fieldId: buffer.fieldId,
-          userId: buffer.userId,
-          userName: buffer.userName,
-          previousUserId: buffer.previousUserId,
-          previousUserName: buffer.previousUserName,
-          valueBefore: buffer.initialValue,
-          valueAfter: buffer.currentValue,
-          actionType,
-          startTimestamp: buffer.startTimestamp,
-          endTimestamp: buffer.lastUpdateTimestamp,
-          durationMs,
-          keystrokeCount: buffer.keystrokeCount,
-          hadValidationError: buffer.hadValidationError,
-        })
-      } catch (error) {
-        console.error('[Room] Error flushing buffer to telemetry:', error)
-      }
-    })
+    // Store grouped action via telemetry handler (await to ensure it's written before returning)
+    try {
+      await telemetryHandler.trackActionSequence({
+        sessionId: this.roomId,
+        submissionCycleId: this.currentSubmissionCycleId!,
+        fieldId: buffer.fieldId,
+        userId: buffer.userId,
+        userName: buffer.userName,
+        previousUserId: buffer.previousUserId,
+        previousUserName: buffer.previousUserName,
+        valueBefore: buffer.initialValue,
+        valueAfter: buffer.currentValue,
+        actionType,
+        startTimestamp: buffer.startTimestamp,
+        endTimestamp: buffer.lastUpdateTimestamp,
+        durationMs,
+        keystrokeCount: buffer.keystrokeCount,
+        hadValidationError: buffer.hadValidationError,
+      })
+    } catch (error) {
+      console.error('[Room] Error flushing buffer to telemetry:', error)
+    }
   }
 
   /**
@@ -334,18 +332,17 @@ class Room {
 
     console.log(`[Room ${this.roomId}] Ending submission cycle: ${this.currentSubmissionCycleId} by ${submittedByName}`)
 
-    setImmediate(async () => {
-      try {
-        await telemetryHandler.endSubmissionCycle(
-          this.roomId,
-          this.currentSubmissionCycleId!,
-          submittedBy,
-          submittedByName
-        )
-      } catch (error) {
-        console.error('[Room] Error ending submission cycle:', error)
-      }
-    })
+    // Calculate metrics and update cycle (wait for this to complete)
+    try {
+      await telemetryHandler.endSubmissionCycle(
+        this.roomId,
+        this.currentSubmissionCycleId!,
+        submittedBy,
+        submittedByName
+      )
+    } catch (error) {
+      console.error('[Room] Error ending submission cycle:', error)
+    }
 
     // Start new cycle for next form
     this.currentSubmissionCycleId = null
