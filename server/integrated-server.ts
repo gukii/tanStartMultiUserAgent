@@ -15,6 +15,7 @@ import express from 'express'
 import { createServer } from 'http'
 import { createProxyMiddleware } from 'http-proxy-middleware'
 import { telemetryHandler } from './telemetry-handler'
+import { initDatabase } from '../scripts/init-db'
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -812,6 +813,10 @@ async function start() {
   try {
     console.log(`[DEBUG] IS_PRODUCTION = ${IS_PRODUCTION}`)
     console.log(`[DEBUG] NODE_ENV = ${process.env.NODE_ENV}`)
+
+    // Initialize telemetry database (create directory and run migrations)
+    console.log(`[Startup] Initializing telemetry database...`)
+    await initDatabase()
 
     // Always start TanStack Start server and proxy to it
     // (TanStack Start is an SSR framework, needs to run as a server)
