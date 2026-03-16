@@ -528,6 +528,8 @@ export const getSubmissionCycles = createServerFn({ method: 'GET' })
       }
       const startTime = timeRanges[options.timeRange]
 
+      console.log(`[Analytics] getSubmissionCycles: timeRange=${options.timeRange}, startTime=${startTime}, now=${now}`)
+
       // Query submission cycles with metrics
       const query = `
         SELECT
@@ -560,6 +562,11 @@ export const getSubmissionCycles = createServerFn({ method: 'GET' })
       `
 
       const rows = db.execute({ sql: query, args: [startTime] }).rows as any[]
+
+      console.log(`[Analytics] getSubmissionCycles: Found ${rows.length} cycles`)
+      if (rows.length > 0) {
+        console.log(`[Analytics] First cycle:`, rows[0])
+      }
 
       const cycles = rows.map(row => ({
         id: String(row.id),
