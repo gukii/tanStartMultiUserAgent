@@ -292,12 +292,69 @@ class Room {
 
   /**
    * Determine action type based on value changes
+   * Uses diff analysis to detect insertions, edits, extensions, etc.
    */
   private determineActionType(before: string, after: string): string {
     if (!before || before.length === 0) return 'new'
     if (!after || after.length === 0) return 'clear'
+
+    // Simple cases: pure extend or shorten at the end
     if (after.startsWith(before)) return 'extend'
     if (before.startsWith(after)) return 'shorten'
+
+    // Find common prefix (what stays the same at the start)
+    let prefixLen = 0
+    const minLen = Math.min(before.length, after.length)
+    while (prefixLen < minLen && before[prefixLen] === after[prefixLen]) {
+      prefixLen++
+    }
+
+    // Find common suffix (what stays the same at the end)
+    let suffixLen = 0
+    while (
+      suffixLen < minLen - prefixLen &&
+      before[before.length - 1 - suffixLen] === after[after.length - 1 - suffixLen]
+    ) {
+      suffixLen++
+    }
+
+    // Extract the changed parts
+    const beforeMiddle = before.substring(prefixLen, before.length - suffixLen)
+    const afterMiddle = after.substring(prefixLen, after.length - suffixLen)
+
+    // If both prefix and suffix exist, this is an insertion/edit in the middle
+    if (prefixLen > 0 && suffixLen > 0) {
+      if (beforeMiddle.length === 0 && afterMiddle.length > 0) {
+        // Only added text in the middle
+        return 'insert'
+      } else if (beforeMiddle.length > 0 && afterMiddle.length > 0) {
+        // Text was replaced in the middle
+        return 'edit'
+      } else if (beforeMiddle.length > 0 && afterMiddle.length === 0) {
+        // Text was removed from the middle
+        return 'delete'
+      }
+    }
+
+    // If only prefix exists (suffix is empty), check what changed at the end
+    if (prefixLen > 0 && suffixLen === 0) {
+      if (afterMiddle.length > beforeMiddle.length) {
+        return 'extend' // Added to the end
+      } else {
+        return 'shorten' // Removed from the end
+      }
+    }
+
+    // If only suffix exists (prefix is empty), check what changed at the start
+    if (prefixLen === 0 && suffixLen > 0) {
+      if (afterMiddle.length > beforeMiddle.length) {
+        return 'insert' // Added at the start
+      } else {
+        return 'delete' // Removed from the start
+      }
+    }
+
+    // Complete replacement (no common parts)
     return 'replace'
   }
 

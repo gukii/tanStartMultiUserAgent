@@ -793,7 +793,10 @@ export class TelemetryHandler {
     const actionCounts = {
       new: actions.filter(a => a.actionType === 'new').length,
       extend: actions.filter(a => a.actionType === 'extend').length,
+      insert: actions.filter(a => a.actionType === 'insert').length,
+      edit: actions.filter(a => a.actionType === 'edit').length,
       replace: actions.filter(a => a.actionType === 'replace').length,
+      delete: actions.filter(a => a.actionType === 'delete').length,
       shorten: actions.filter(a => a.actionType === 'shorten').length,
     }
 
@@ -835,7 +838,10 @@ export class TelemetryHandler {
         totalActions: actions.length,
         actionsNew: actionCounts.new,
         actionsExtend: actionCounts.extend,
+        actionsInsert: actionCounts.insert,
+        actionsEdit: actionCounts.edit,
         actionsReplace: actionCounts.replace,
+        actionsDelete: actionCounts.delete,
         actionsShorten: actionCounts.shorten,
         errorsFixed,
         errorsBroke,

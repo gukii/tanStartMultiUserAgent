@@ -15,6 +15,13 @@
       "when": 1773476873182,
       "tag": "0001_sudden_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773655212960,
+      "tag": "0002_needy_drax",
+      "breakpoints": true
     }
   ]
 }

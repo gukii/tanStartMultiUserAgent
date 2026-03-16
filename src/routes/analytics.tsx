@@ -109,7 +109,10 @@ interface SubmissionCycle {
   totalActions: number
   actionsNew: number
   actionsExtend: number
+  actionsInsert: number
+  actionsEdit: number
   actionsReplace: number
+  actionsDelete: number
   actionsShorten: number
   errorsFixed: number
   errorsBroke: number
@@ -692,19 +695,21 @@ function AnalyticsPage() {
                       <th className="px-4 py-3 font-semibold text-gray-700">Submitted By</th>
                       <th className="px-4 py-3 font-semibold text-gray-700">Duration</th>
                       <th className="px-4 py-3 font-semibold text-gray-700">Fields</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700">Extended</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700">Replaced</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700">Fixed</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700">Broke</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Ext</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Ins</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Edit</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Repl</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Del</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Fix</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Brk</th>
                       <th className="px-4 py-3 font-semibold text-gray-700">Accuracy</th>
                       <th className="px-4 py-3 font-semibold text-gray-700">Score</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {submissionCycles.map((cycle) => (
-                      <>
+                      <React.Fragment key={cycle.id}>
                         <tr
-                          key={cycle.id}
                           onClick={() => handleCycleClick(cycle.id)}
                           className="cursor-pointer hover:bg-gray-50 transition-colors"
                         >
@@ -728,8 +733,17 @@ function AnalyticsPage() {
                           <td className="px-4 py-3 text-green-600 font-medium">
                             {cycle.actionsExtend}
                           </td>
+                          <td className="px-4 py-3 text-teal-600 font-medium">
+                            {cycle.actionsInsert}
+                          </td>
+                          <td className="px-4 py-3 text-orange-600 font-medium">
+                            {cycle.actionsEdit}
+                          </td>
                           <td className="px-4 py-3 text-blue-600 font-medium">
                             {cycle.actionsReplace}
+                          </td>
+                          <td className="px-4 py-3 text-red-600 font-medium">
+                            {cycle.actionsDelete}
                           </td>
                           <td className="px-4 py-3 text-emerald-600 font-medium">
                             {cycle.errorsFixed}
@@ -752,7 +766,7 @@ function AnalyticsPage() {
                         {/* Drill-down: Action sequences for this cycle */}
                         {selectedCycleId === cycle.id && (
                           <tr>
-                            <td colSpan={10} className="bg-gray-50 px-4 py-4">
+                            <td colSpan={13} className="bg-gray-50 px-4 py-4">
                               {actionsLoading ? (
                                 <div className="py-4 text-center text-gray-500">Loading actions...</div>
                               ) : actionSequences && actionSequences.length > 0 ? (
@@ -788,9 +802,13 @@ function AnalyticsPage() {
                                                   {getInitials(action.userName)}:
                                                 </span>
                                                 <span className={`font-medium ${
-                                                  action.actionType === 'extend' ? 'text-green-600' :
-                                                  action.actionType === 'replace' ? 'text-blue-600' :
                                                   action.actionType === 'new' ? 'text-purple-600' :
+                                                  action.actionType === 'extend' ? 'text-green-600' :
+                                                  action.actionType === 'insert' ? 'text-teal-600' :
+                                                  action.actionType === 'edit' ? 'text-orange-600' :
+                                                  action.actionType === 'replace' ? 'text-blue-600' :
+                                                  action.actionType === 'delete' ? 'text-red-600' :
+                                                  action.actionType === 'shorten' ? 'text-amber-600' :
                                                   'text-gray-600'
                                                 }`}>
                                                   {action.actionType}
@@ -827,7 +845,7 @@ function AnalyticsPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

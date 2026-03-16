@@ -455,7 +455,10 @@ export const telemetrySubmissionCycles = sqliteTable('telemetry_submission_cycle
   // Action breakdown
   actionsNew: integer('actions_new').notNull().default(0),
   actionsExtend: integer('actions_extend').notNull().default(0),
+  actionsInsert: integer('actions_insert').notNull().default(0),
+  actionsEdit: integer('actions_edit').notNull().default(0),
   actionsReplace: integer('actions_replace').notNull().default(0),
+  actionsDelete: integer('actions_delete').notNull().default(0),
   actionsShorten: integer('actions_shorten').notNull().default(0),
 
   // Error tracking
