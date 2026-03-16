@@ -561,7 +561,8 @@ export const getSubmissionCycles = createServerFn({ method: 'GET' })
         LIMIT 100
       `
 
-      const rows = db.execute({ sql: query, args: [startTime] }).rows as any[]
+      const result = await db.execute({ sql: query, args: [startTime] })
+      const rows = result.rows as any[]
 
       console.log(`[Analytics] getSubmissionCycles: Found ${rows.length} cycles`)
       if (rows.length > 0) {
@@ -639,7 +640,8 @@ export const getActionSequences = createServerFn({ method: 'GET' })
         ORDER BY a.timestamp ASC
       `
 
-      const rows = db.execute({ sql: query, args: [cycleId] }).rows as any[]
+      const result = await db.execute({ sql: query, args: [cycleId] })
+      const rows = result.rows as any[]
 
       const actions = rows.map(row => ({
         id: Number(row.id),
