@@ -656,50 +656,16 @@ class Room {
       }
 
       case 'VALIDATION_STATUS': {
-        // Track validation error state for collaborative edit analysis
-        const previousState = this.validationErrors.get(msg.fieldId)
-
+        // Track validation error state for use at submission time
+        // (We don't record to telemetry during editing - only at submission)
         this.validationErrors.set(msg.fieldId, {
           hasError: msg.hasError,
           errorMessage: msg.errorMessage,
         })
 
-        // If error was fixed (had error, now doesn't), retroactively update last collaborative edit
-        if (previousState?.hasError && !msg.hasError) {
-          const fieldValue = this.fieldValues.get(msg.fieldId)
-          if (fieldValue) {
-            setImmediate(async () => {
-              try {
-                await telemetryHandler.markValidationFixed(
-                  this.roomId,
-                  msg.fieldId,
-                  fieldValue.updatedBy
-                )
-              } catch (error) {
-                console.error('[Server] Error marking validation fixed:', error)
-              }
-            })
-          }
-        }
-
-        // If error was introduced (didn't have error, now does), retroactively update last collaborative edit
-        if (!previousState?.hasError && msg.hasError) {
-          const fieldValue = this.fieldValues.get(msg.fieldId)
-          if (fieldValue) {
-            setImmediate(async () => {
-              try {
-                await telemetryHandler.markValidationIntroduced(
-                  this.roomId,
-                  msg.fieldId,
-                  fieldValue.updatedBy,
-                  msg.errorMessage
-                )
-              } catch (error) {
-                console.error('[Server] Error marking validation introduced:', error)
-              }
-            })
-          }
-        }
+        // Note: We used to mark errors in real-time here, but now we only
+        // mark them at submission time to properly attribute who introduced
+        // submission errors vs. who fixed them across cycles
         break
       }
 
