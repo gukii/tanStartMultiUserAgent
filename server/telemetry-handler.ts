@@ -861,10 +861,10 @@ export class TelemetryHandler {
     const errorsBroke = actions.filter(a => a.introducedValidationError).length
 
     // Calculate accuracy: % of fields without errors
-    const fieldsWithErrors = new Set(
+    const errorFieldsSet = new Set(
       actions.filter(a => a.hadValidationError || a.introducedValidationError).map(a => a.fieldId)
     )
-    const accuracy = ((fields.size - fieldsWithErrors.size) / fields.size) * 100
+    const accuracy = ((fields.size - errorFieldsSet.size) / fields.size) * 100
 
     // Calculate collaboration score (weighted formula)
     // Factors: accuracy (40%), collaboration efficiency (30%), error correction (30%)
