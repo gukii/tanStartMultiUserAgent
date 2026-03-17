@@ -420,6 +420,9 @@ export const telemetryActionSequences = sqliteTable('telemetry_action_sequences'
   fixedValidationError: integer('fixed_validation_error', { mode: 'boolean' }).notNull().default(false),
   introducedValidationError: integer('introduced_validation_error', { mode: 'boolean' }).notNull().default(false),
 
+  // Submission tracking
+  isFinalSubmittedValue: integer('is_final_submitted_value', { mode: 'boolean' }).notNull().default(false),
+
   // Metrics
   keystrokeCount: integer('keystroke_count').notNull().default(0), // Number of individual edits in this sequence
   valueChangePercent: integer('value_change_percent'), // % of characters changed (0-100)

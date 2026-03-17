@@ -457,6 +457,7 @@ export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
             a.had_validation_error as hadValidationError,
             a.fixed_validation_error as fixedValidationError,
             a.introduced_validation_error as introducedValidationError,
+            a.is_final_submitted_value as isFinalSubmittedValue,
             a.value_change_percent as valueChangePercent,
             a.duration_ms as durationMs,
             a.keystroke_count as keystrokeCount,
@@ -488,6 +489,7 @@ export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
         hadValidationError: Boolean(row.hadValidationError),
         fixedValidationError: Boolean(row.fixedValidationError),
         introducedValidationError: Boolean(row.introducedValidationError),
+        isFinalSubmittedValue: Boolean(row.isFinalSubmittedValue),
         valueChangePercent: Number(row.valueChangePercent) || 0,
         durationMs: row.durationMs ? Number(row.durationMs) : null,
         keystrokeCount: Number(row.keystrokeCount) || 0,
@@ -642,6 +644,7 @@ export const getActionSequences = createServerFn({ method: 'GET' })
           a.had_validation_error as hadValidationError,
           a.fixed_validation_error as fixedValidationError,
           a.introduced_validation_error as introducedValidationError,
+          a.is_final_submitted_value as isFinalSubmittedValue,
           a.keystroke_count as keystrokeCount,
           a.value_change_percent as valueChangePercent
         FROM telemetry_action_sequences a
@@ -668,6 +671,7 @@ export const getActionSequences = createServerFn({ method: 'GET' })
         hadValidationError: Boolean(row.hadValidationError),
         fixedValidationError: Boolean(row.fixedValidationError),
         introducedValidationError: Boolean(row.introducedValidationError),
+        isFinalSubmittedValue: Boolean(row.isFinalSubmittedValue),
         keystrokeCount: Number(row.keystrokeCount),
         valueChangePercent: Number(row.valueChangePercent) || 0,
       }))

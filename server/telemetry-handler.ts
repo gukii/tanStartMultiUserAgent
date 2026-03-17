@@ -774,7 +774,8 @@ export class TelemetryHandler {
     sessionId: string,
     cycleId: string,
     submittedBy: string,
-    submittedByName: string
+    submittedByName: string,
+    finalFieldValues?: Map<string, string>
   ): Promise<void> {
     // Get all actions for this cycle
     const actions = await telemetryDb
@@ -785,6 +786,29 @@ export class TelemetryHandler {
     if (actions.length === 0) {
       console.log(`[Telemetry] No actions found for cycle ${cycleId}, skipping metrics`)
       return
+    }
+
+    // Mark final submitted values if provided
+    if (finalFieldValues) {
+      for (const [fieldId, finalValue] of finalFieldValues.entries()) {
+        // Find the last action on this field in this cycle
+        const fieldActions = actions
+          .filter(a => a.fieldId === fieldId)
+          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+
+        if (fieldActions.length > 0) {
+          const lastAction = fieldActions[0]
+          // Check if this action's valueAfter matches the final submitted value
+          if (lastAction.valueAfter === finalValue) {
+            await telemetryDb
+              .update(schemaTelemetry.telemetryActionSequences)
+              .set({ isFinalSubmittedValue: true })
+              .where(eq(schemaTelemetry.telemetryActionSequences.id, lastAction.id))
+
+            console.log(`[Telemetry] Marked action ${lastAction.id} as final submitted value for ${fieldId}`)
+          }
+        }
+      }
     }
 
     // Calculate metrics

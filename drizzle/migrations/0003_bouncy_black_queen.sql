@@ -1,0 +1,1 @@
+ALTER TABLE `telemetry_action_sequences` ADD `is_final_submitted_value` integer DEFAULT false NOT NULL;

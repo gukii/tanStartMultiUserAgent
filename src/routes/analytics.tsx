@@ -91,6 +91,7 @@ interface CollaborativeEdit {
   hadValidationError: boolean
   fixedValidationError: boolean
   introducedValidationError: boolean
+  isFinalSubmittedValue: boolean
   valueChangePercent: number
   durationMs: number | null
   keystrokeCount: number
@@ -142,6 +143,7 @@ interface ActionSequence {
   hadValidationError: boolean
   fixedValidationError: boolean
   introducedValidationError: boolean
+  isFinalSubmittedValue: boolean
   keystrokeCount: number
   valueChangePercent: number
 }
@@ -566,10 +568,13 @@ function AnalyticsPage() {
                                       {edit.actionType}
                                     </span>
                                     {edit.fixedValidationError && (
-                                      <span className="text-green-600 ml-1">✓</span>
+                                      <span className="text-green-600 ml-1 font-bold" title="Fixed validation error">✓</span>
+                                    )}
+                                    {edit.isFinalSubmittedValue && !edit.introducedValidationError && (
+                                      <span className="text-gray-500 ml-1" title="Final submitted value">✓</span>
                                     )}
                                     {edit.introducedValidationError && (
-                                      <span className="text-red-600 ml-1">✗</span>
+                                      <span className="text-red-600 ml-1 font-bold" title="Introduced validation error">✗</span>
                                     )}
                                   </div>
                                 </td>
@@ -577,6 +582,10 @@ function AnalyticsPage() {
                                   {edit.previousUserName ? (
                                     <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-xs font-semibold" title={edit.previousUserName}>
                                       {getInitials(edit.previousUserName)}
+                                    </span>
+                                  ) : edit.valueBefore ? (
+                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold" title="AI">
+                                      AI
                                     </span>
                                   ) : (
                                     <span className="text-gray-400 italic">new</span>
@@ -826,10 +835,13 @@ function AnalyticsPage() {
                                                   {action.actionType}
                                                 </span>
                                                 {action.fixedValidationError && (
-                                                  <span className="text-green-600 ml-1">✓</span>
+                                                  <span className="text-green-600 ml-1 font-bold" title="Fixed validation error">✓</span>
+                                                )}
+                                                {action.isFinalSubmittedValue && !action.introducedValidationError && (
+                                                  <span className="text-gray-500 ml-1" title="Final submitted value">✓</span>
                                                 )}
                                                 {action.introducedValidationError && (
-                                                  <span className="text-red-600 ml-1">✗</span>
+                                                  <span className="text-red-600 ml-1 font-bold" title="Introduced validation error">✗</span>
                                                 )}
                                               </div>
                                             </td>

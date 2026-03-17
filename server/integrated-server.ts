@@ -330,8 +330,14 @@ class Room {
     // If both prefix and suffix exist, this is an insertion/edit in the middle
     if (prefixLen > 0 && suffixLen > 0) {
       if (beforeMiddle.length === 0 && afterMiddle.length > 0) {
-        // Only added text in the middle
-        return 'insert'
+        // Text was added. Check if original text is fully preserved as a contiguous block
+        if (after.includes(before)) {
+          // Original text fully preserved (e.g., "Mills" → "Mini-Mills")
+          return 'extend'
+        } else {
+          // Original text split with insertion in middle (e.g., "710 S Church" → "710 St Marx Church")
+          return 'insert'
+        }
       } else if (beforeMiddle.length > 0 && afterMiddle.length > 0) {
         // Text was replaced in the middle
         return 'edit'
@@ -353,7 +359,14 @@ class Room {
     // If only suffix exists (prefix is empty), check what changed at the start
     if (prefixLen === 0 && suffixLen > 0) {
       if (afterMiddle.length > beforeMiddle.length) {
-        return 'insert' // Added at the start
+        // Text added at the start. Check if original is fully preserved
+        if (beforeMiddle.length === 0 && after.includes(before)) {
+          // Prepended text (e.g., "Smith" → "John Smith")
+          return 'extend'
+        } else {
+          // Text added at the start with deletions/changes
+          return 'insert'
+        }
       } else {
         return 'delete' // Removed from the start
       }
@@ -395,13 +408,20 @@ class Room {
 
     console.log(`[Room ${this.roomId}] Ending submission cycle: ${this.currentSubmissionCycleId} by ${submittedByName}`)
 
+    // Collect final field values at submission time
+    const finalFieldValues = new Map<string, string>()
+    for (const [fieldId, fieldValue] of this.fieldValues.entries()) {
+      finalFieldValues.set(fieldId, fieldValue.value)
+    }
+
     // Calculate metrics and update cycle (wait for this to complete)
     try {
       await telemetryHandler.endSubmissionCycle(
         this.roomId,
         this.currentSubmissionCycleId!,
         submittedBy,
-        submittedByName
+        submittedByName,
+        finalFieldValues
       )
     } catch (error) {
       console.error('[Room] Error ending submission cycle:', error)
