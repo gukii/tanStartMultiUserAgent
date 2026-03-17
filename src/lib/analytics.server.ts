@@ -419,54 +419,55 @@ export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
       const startTime = Math.floor(startTimeMs / 1000)
 
       // Build WHERE clause based on filters
-      const conditions: string[] = ['ce.timestamp >= ?']
+      const conditions: string[] = ['a.timestamp >= ?']
       const args: any[] = [startTime]
 
       if (data.userId) {
-        conditions.push('ce.user_id = ?')
+        conditions.push('a.user_id = ?')
         args.push(data.userId)
       }
 
       if (data.sessionId) {
-        conditions.push('ce.session_id = ?')
+        conditions.push('a.session_id = ?')
         args.push(data.sessionId)
       }
 
       if (data.fieldId) {
-        conditions.push('ce.field_id = ?')
+        conditions.push('a.field_id = ?')
         args.push(data.fieldId)
       }
 
       const whereClause = conditions.join(' AND ')
 
-      // Query collaborative edits with details including session metadata
+      // Query action sequences with details including session metadata
       const result = await db.execute({
         sql: `
           SELECT
-            ce.id,
-            ce.session_id as sessionId,
-            ce.field_id as fieldId,
-            ce.timestamp,
-            ce.user_id as userId,
-            ce.user_name as userName,
-            ce.value_before as valueBefore,
-            ce.value_after as valueAfter,
-            ce.edit_type as editType,
-            ce.previous_user_id as previousUserId,
-            ce.previous_user_name as previousUserName,
-            ce.had_validation_error as hadValidationError,
-            ce.fixed_validation_error as fixedValidationError,
-            ce.introduced_validation_error as introducedValidationError,
-            ce.value_change_percent as valueChangePercent,
-            ce.edit_duration_ms as editDurationMs,
+            a.id,
+            a.session_id as sessionId,
+            a.field_id as fieldId,
+            a.timestamp,
+            a.user_id as userId,
+            a.user_name as userName,
+            a.value_before as valueBefore,
+            a.value_after as valueAfter,
+            a.action_type as actionType,
+            a.previous_user_id as previousUserId,
+            a.previous_user_name as previousUserName,
+            a.had_validation_error as hadValidationError,
+            a.fixed_validation_error as fixedValidationError,
+            a.introduced_validation_error as introducedValidationError,
+            a.value_change_percent as valueChangePercent,
+            a.duration_ms as durationMs,
+            a.keystroke_count as keystrokeCount,
             s.route,
             s.submit_mode as submitMode,
             s.outcome,
             s.started_at as sessionStartedAt
-          FROM telemetry_collaborative_edits ce
-          JOIN telemetry_sessions s ON ce.session_id = s.id
+          FROM telemetry_action_sequences a
+          JOIN telemetry_sessions s ON a.session_id = s.id
           WHERE ${whereClause}
-          ORDER BY s.started_at DESC, ce.timestamp ASC
+          ORDER BY s.started_at DESC, a.timestamp ASC
           LIMIT 100
         `,
         args,
@@ -481,14 +482,15 @@ export const getCollaborativeEditDetails = createServerFn({ method: 'GET' })
         userName: String(row.userName),
         valueBefore: String(row.valueBefore || ''),
         valueAfter: String(row.valueAfter || ''),
-        editType: String(row.editType),
+        actionType: String(row.actionType),
         previousUserId: row.previousUserId ? String(row.previousUserId) : null,
         previousUserName: row.previousUserName ? String(row.previousUserName) : null,
         hadValidationError: Boolean(row.hadValidationError),
         fixedValidationError: Boolean(row.fixedValidationError),
         introducedValidationError: Boolean(row.introducedValidationError),
         valueChangePercent: Number(row.valueChangePercent) || 0,
-        editDurationMs: row.editDurationMs ? Number(row.editDurationMs) : null,
+        durationMs: row.durationMs ? Number(row.durationMs) : null,
+        keystrokeCount: Number(row.keystrokeCount) || 0,
         sessionStartedAt: Number(row.sessionStartedAt),
         route: String(row.route),
         submitMode: String(row.submitMode),

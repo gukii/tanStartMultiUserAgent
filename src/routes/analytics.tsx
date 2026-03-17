@@ -12,7 +12,7 @@
  */
 
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { getAnalytics, getCollaborativeEditDetails, getSubmissionCycles, getActionSequences } from '../lib/analytics.server'
 
 export const Route = createFileRoute('/analytics')({
@@ -34,6 +34,11 @@ interface UserMetrics {
   aiDraftsRejected: number
   aiAcceptanceRate: number
   improvementRate: number
+  fieldsExtended: number
+  fieldsReplaced: number
+  errorsFixed: number
+  errorsIntroduced: number
+  collaborativeScore: number
 }
 
 interface CollaborationMetrics {
@@ -80,14 +85,15 @@ interface CollaborativeEdit {
   userName: string
   valueBefore: string
   valueAfter: string
-  editType: string
+  actionType: string
   previousUserId: string | null
   previousUserName: string | null
   hadValidationError: boolean
   fixedValidationError: boolean
   introducedValidationError: boolean
   valueChangePercent: number
-  editDurationMs: number | null
+  durationMs: number | null
+  keystrokeCount: number
   route: string
   submitMode: string
   outcome: string | null
@@ -542,25 +548,30 @@ function AnalyticsPage() {
                                   {edit.fieldId}
                                 </td>
                                 <td className="px-2 py-1.5">
-                                  <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${
-                                    edit.editType === 'extend'
-                                      ? 'bg-blue-100 text-blue-800'
-                                      : edit.editType === 'replace'
-                                      ? 'bg-purple-100 text-purple-800'
-                                      : 'bg-gray-100 text-gray-700'
-                                  }`}>
-                                    {edit.editType}
-                                  </span>
-                                  {edit.fixedValidationError && (
-                                    <span className="ml-1 inline-block rounded bg-green-100 px-1.5 py-0.5 text-xs font-semibold text-green-800">
-                                      ✓
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-semibold text-violet-600 text-xs">
+                                      {getInitials(edit.userName)}:
                                     </span>
-                                  )}
-                                  {edit.introducedValidationError && (
-                                    <span className="ml-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-800">
-                                      ✗
+                                    <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${
+                                      edit.actionType === 'new' ? 'bg-purple-100 text-purple-800' :
+                                      edit.actionType === 'extend' ? 'bg-green-100 text-green-800' :
+                                      edit.actionType === 'insert' ? 'bg-teal-100 text-teal-800' :
+                                      edit.actionType === 'edit' ? 'bg-orange-100 text-orange-800' :
+                                      edit.actionType === 'replace' ? 'bg-blue-100 text-blue-800' :
+                                      edit.actionType === 'delete' ? 'bg-red-100 text-red-800' :
+                                      edit.actionType === 'shorten' ? 'bg-amber-100 text-amber-800' :
+                                      edit.actionType === 'clear' ? 'bg-gray-100 text-gray-800' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {edit.actionType}
                                     </span>
-                                  )}
+                                    {edit.fixedValidationError && (
+                                      <span className="text-green-600 ml-1">✓</span>
+                                    )}
+                                    {edit.introducedValidationError && (
+                                      <span className="text-red-600 ml-1">✗</span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="px-2 py-1.5 text-gray-600">
                                   {edit.previousUserName ? (
@@ -581,7 +592,7 @@ function AnalyticsPage() {
                                   {edit.valueChangePercent}%
                                 </td>
                                 <td className="px-2 py-1.5 text-center text-gray-600 whitespace-nowrap">
-                                  {edit.editDurationMs ? `${(edit.editDurationMs / 1000).toFixed(1)}s` : '-'}
+                                  {edit.durationMs ? `${(edit.durationMs / 1000).toFixed(1)}s` : '-'}
                                 </td>
                               </tr>
                             ))}
@@ -708,7 +719,7 @@ function AnalyticsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {submissionCycles.map((cycle) => (
-                      <React.Fragment key={cycle.id}>
+                      <Fragment key={cycle.id}>
                         <tr
                           onClick={() => handleCycleClick(cycle.id)}
                           className="cursor-pointer hover:bg-gray-50 transition-colors"
@@ -798,17 +809,18 @@ function AnalyticsPage() {
                                             </td>
                                             <td className="px-3 py-2">
                                               <div className="flex items-center gap-1">
-                                                <span className="font-semibold text-violet-600">
+                                                <span className="font-semibold text-violet-600 text-xs">
                                                   {getInitials(action.userName)}:
                                                 </span>
-                                                <span className={`font-medium ${
-                                                  action.actionType === 'new' ? 'text-purple-600' :
-                                                  action.actionType === 'extend' ? 'text-green-600' :
-                                                  action.actionType === 'insert' ? 'text-teal-600' :
-                                                  action.actionType === 'edit' ? 'text-orange-600' :
-                                                  action.actionType === 'replace' ? 'text-blue-600' :
-                                                  action.actionType === 'delete' ? 'text-red-600' :
-                                                  action.actionType === 'shorten' ? 'text-amber-600' :
+                                                <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${
+                                                  action.actionType === 'new' ? 'bg-purple-100 text-purple-800' :
+                                                  action.actionType === 'extend' ? 'bg-green-100 text-green-800' :
+                                                  action.actionType === 'insert' ? 'bg-teal-100 text-teal-800' :
+                                                  action.actionType === 'edit' ? 'bg-orange-100 text-orange-800' :
+                                                  action.actionType === 'replace' ? 'bg-blue-100 text-blue-800' :
+                                                  action.actionType === 'delete' ? 'bg-red-100 text-red-800' :
+                                                  action.actionType === 'shorten' ? 'bg-amber-100 text-amber-800' :
+                                                  action.actionType === 'clear' ? 'bg-gray-100 text-gray-800' :
                                                   'text-gray-600'
                                                 }`}>
                                                   {action.actionType}
@@ -845,7 +857,7 @@ function AnalyticsPage() {
                             </td>
                           </tr>
                         )}
-                      </React.Fragment>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

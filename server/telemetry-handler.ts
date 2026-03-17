@@ -697,6 +697,7 @@ export class TelemetryHandler {
     durationMs: number
     keystrokeCount: number
     hadValidationError: boolean
+    hasValidationErrorNow: boolean
   }): Promise<void> {
     const sessionId = data.sessionId
     const participantId = await this.ensureParticipant(sessionId, data.userId, data.userName)
@@ -707,11 +708,11 @@ export class TelemetryHandler {
     // Calculate value change percentage
     const valueChangePercent = this.calculateValueChangePercent(data.valueBefore, data.valueAfter)
 
-    // Get current validation state for error tracking
+    // Calculate validation state changes for error tracking
     const validationState = {
       hadError: data.hadValidationError,
-      fixedError: false,
-      introducedError: false,
+      fixedError: data.hadValidationError && !data.hasValidationErrorNow,
+      introducedError: !data.hadValidationError && data.hasValidationErrorNow,
     }
 
     // Store action sequence

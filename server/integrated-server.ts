@@ -249,6 +249,10 @@ class Room {
     // Determine action type
     const actionType = this.determineActionType(buffer.initialValue, buffer.currentValue)
 
+    // Check current validation state
+    const currentValidationState = this.validationErrors.get(buffer.fieldId)
+    const hasValidationErrorNow = currentValidationState?.hasError || false
+
     // Store grouped action via telemetry handler (await to ensure it's written before returning)
     try {
       await telemetryHandler.trackActionSequence({
@@ -267,6 +271,7 @@ class Room {
         durationMs,
         keystrokeCount: buffer.keystrokeCount,
         hadValidationError: buffer.hadValidationError,
+        hasValidationErrorNow,
       })
     } catch (error) {
       console.error('[Room] Error flushing buffer to telemetry:', error)
