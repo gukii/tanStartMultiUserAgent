@@ -77,6 +77,9 @@ export class TelemetryHandler {
   // Cache participant IDs by session + userId
   private participantCache = new Map<string, number>();
 
+  // Track which fields had errors in previous submission cycle
+  private previousCycleErrors = new Map<string, Set<string>>(); // sessionId -> Set<fieldId>
+
   // Cache field session IDs
   private fieldSessionCache = new Map<string, number>();
 
@@ -680,6 +683,7 @@ export class TelemetryHandler {
 
   /**
    * Track grouped action sequence (replaces keystroke-level tracking)
+   * Note: Validation errors are NOT tracked here - they're marked at submission time
    */
   async trackActionSequence(data: {
     sessionId: string
@@ -696,8 +700,6 @@ export class TelemetryHandler {
     endTimestamp: number
     durationMs: number
     keystrokeCount: number
-    hadValidationError: boolean
-    hasValidationErrorNow: boolean
   }): Promise<void> {
     const sessionId = data.sessionId
     const participantId = await this.ensureParticipant(sessionId, data.userId, data.userName)
@@ -708,12 +710,9 @@ export class TelemetryHandler {
     // Calculate value change percentage
     const valueChangePercent = this.calculateValueChangePercent(data.valueBefore, data.valueAfter)
 
-    // Calculate validation state changes for error tracking
-    const validationState = {
-      hadError: data.hadValidationError,
-      fixedError: data.hadValidationError && !data.hasValidationErrorNow,
-      introducedError: !data.hadValidationError && data.hasValidationErrorNow,
-    }
+    // Don't mark errors during editing - only at submission time
+    // This allows us to properly track which user's action led to submission error
+    // and which user fixed it in the next cycle
 
     // Store action sequence
     await telemetryDb.insert(schemaTelemetry.telemetryActionSequences).values({
@@ -732,9 +731,9 @@ export class TelemetryHandler {
       valueBefore: sanitizeValue(data.valueBefore, 'capture'),
       valueAfter: sanitizeValue(data.valueAfter, 'capture'),
       actionType: data.actionType,
-      hadValidationError: validationState.hadError,
-      fixedValidationError: validationState.fixedError,
-      introducedValidationError: validationState.introducedError,
+      hadValidationError: false, // Will be set at submission time
+      fixedValidationError: false, // Will be set at submission time
+      introducedValidationError: false, // Will be set at submission time
       keystrokeCount: data.keystrokeCount,
       valueChangePercent,
     })
@@ -775,7 +774,8 @@ export class TelemetryHandler {
     cycleId: string,
     submittedBy: string,
     submittedByName: string,
-    finalFieldValues?: Map<string, string>
+    finalFieldValues?: Map<string, string>,
+    fieldsWithErrors?: Set<string>
   ): Promise<void> {
     // Get all actions for this cycle
     const actions = await telemetryDb
@@ -788,7 +788,13 @@ export class TelemetryHandler {
       return
     }
 
-    // Mark final submitted values if provided
+    // Get previous cycle's error fields
+    const previousErrors = this.previousCycleErrors.get(sessionId) || new Set<string>()
+
+    // Collect current cycle's fields with errors (passed from integrated-server)
+    const currentErrorFields = fieldsWithErrors || new Set<string>()
+
+    // Mark final submitted values and error/fix status
     if (finalFieldValues) {
       for (const [fieldId, finalValue] of finalFieldValues.entries()) {
         // Find the last action on this field in this cycle
@@ -798,18 +804,44 @@ export class TelemetryHandler {
 
         if (fieldActions.length > 0) {
           const lastAction = fieldActions[0]
+
           // Check if this action's valueAfter matches the final submitted value
-          if (lastAction.valueAfter === finalValue) {
+          const isFinalValue = lastAction.valueAfter === finalValue
+
+          // Determine error status
+          const hasErrorNow = currentErrorFields.has(fieldId)
+          const hadErrorBefore = previousErrors.has(fieldId)
+
+          const updateData: any = {}
+
+          if (isFinalValue) {
+            updateData.isFinalSubmittedValue = true
+          }
+
+          // Mark as "introduced error" if field has error now
+          if (hasErrorNow) {
+            updateData.introducedValidationError = true
+            console.log(`[Telemetry] Field ${fieldId} has validation error (action by ${lastAction.userName})`)
+          }
+
+          // Mark as "fixed error" if field had error before but not anymore
+          if (hadErrorBefore && !hasErrorNow) {
+            updateData.fixedValidationError = true
+            console.log(`[Telemetry] Field ${fieldId} error was fixed (action by ${lastAction.userName})`)
+          }
+
+          if (Object.keys(updateData).length > 0) {
             await telemetryDb
               .update(schemaTelemetry.telemetryActionSequences)
-              .set({ isFinalSubmittedValue: true })
+              .set(updateData)
               .where(eq(schemaTelemetry.telemetryActionSequences.id, lastAction.id))
-
-            console.log(`[Telemetry] Marked action ${lastAction.id} as final submitted value for ${fieldId}`)
           }
         }
       }
     }
+
+    // Store current errors for next cycle
+    this.previousCycleErrors.set(sessionId, currentErrorFields)
 
     // Calculate metrics
     const participants = new Set(actions.map(a => a.userId))

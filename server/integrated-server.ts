@@ -128,7 +128,6 @@ interface EditBuffer {
   lastUpdateTimestamp: number
   keystrokeCount: number
   flushTimer?: NodeJS.Timeout
-  hadValidationError: boolean
 }
 
 class Room {
@@ -180,7 +179,6 @@ class Room {
         startTimestamp: now,
         lastUpdateTimestamp: now,
         keystrokeCount: 1,
-        hadValidationError: this.validationErrors.get(fieldId)?.hasError || false,
       }
       this.editBuffers.set(bufferKey, buffer)
     } else {
@@ -249,11 +247,8 @@ class Room {
     // Determine action type
     const actionType = this.determineActionType(buffer.initialValue, buffer.currentValue)
 
-    // Check current validation state
-    const currentValidationState = this.validationErrors.get(buffer.fieldId)
-    const hasValidationErrorNow = currentValidationState?.hasError || false
-
     // Store grouped action via telemetry handler (await to ensure it's written before returning)
+    // Note: Validation errors are NOT tracked during editing, only at submission time
     try {
       await telemetryHandler.trackActionSequence({
         sessionId: this.roomId,
@@ -270,8 +265,6 @@ class Room {
         endTimestamp: buffer.lastUpdateTimestamp,
         durationMs,
         keystrokeCount: buffer.keystrokeCount,
-        hadValidationError: buffer.hadValidationError,
-        hasValidationErrorNow,
       })
     } catch (error) {
       console.error('[Room] Error flushing buffer to telemetry:', error)
@@ -397,7 +390,11 @@ class Room {
   /**
    * End current submission cycle and calculate metrics
    */
-  private async endSubmissionCycle(submittedBy: string, submittedByName: string) {
+  private async endSubmissionCycle(
+    submittedBy: string,
+    submittedByName: string,
+    fieldsWithErrors: Set<string>
+  ) {
     if (!this.currentSubmissionCycleId) return
 
     // Flush all pending buffers before ending cycle
@@ -406,7 +403,10 @@ class Room {
       await this.flushBuffer(key, 'form_submission')
     }
 
-    console.log(`[Room ${this.roomId}] Ending submission cycle: ${this.currentSubmissionCycleId} by ${submittedByName}`)
+    console.log(
+      `[Room ${this.roomId}] Ending submission cycle: ${this.currentSubmissionCycleId} by ${submittedByName} ` +
+      `(${fieldsWithErrors.size} fields with errors)`
+    )
 
     // Collect final field values at submission time
     const finalFieldValues = new Map<string, string>()
@@ -421,7 +421,8 @@ class Room {
         this.currentSubmissionCycleId!,
         submittedBy,
         submittedByName,
-        finalFieldValues
+        finalFieldValues,
+        fieldsWithErrors
       )
     } catch (error) {
       console.error('[Room] Error ending submission cycle:', error)
@@ -631,29 +632,18 @@ class Room {
         this.broadcast({ type: 'FORM_CLEARED' })
         break
       case 'FORM_SUBMITTED': {
-        // Mark fields with validation errors at submission time
-        const fieldsWithErrors: string[] = []
+        // Collect fields with validation errors at submission time
+        const fieldsWithErrorsSet = new Set<string>()
         for (const [fieldId, errorState] of this.validationErrors.entries()) {
           if (errorState.hasError) {
-            fieldsWithErrors.push(fieldId)
+            fieldsWithErrorsSet.add(fieldId)
           }
         }
 
         // End current submission cycle with metrics (async, non-blocking)
         const user = this.users.get(userId)
-        const cycleId = this.currentSubmissionCycleId
         setImmediate(() => {
-          // Mark actions on fields with errors at submission time
-          if (cycleId && fieldsWithErrors.length > 0) {
-            for (const fieldId of fieldsWithErrors) {
-              telemetryHandler.markFieldErrorAtSubmission(this.roomId, cycleId, fieldId).catch(err => {
-                console.error('[Room] Error marking field error at submission:', err)
-              })
-            }
-          }
-
-          // Then end the submission cycle
-          this.endSubmissionCycle(userId, user?.name || userId).catch(err => {
+          this.endSubmissionCycle(userId, user?.name || userId, fieldsWithErrorsSet).catch(err => {
             console.error('[Room] Error ending submission cycle:', err)
           })
         })
