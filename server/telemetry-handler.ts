@@ -11,7 +11,7 @@
  */
 
 import { telemetryDb, schemaTelemetry } from '../src/db/client';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import type { TelemetryEvent, PiiMode } from '../src/types/telemetry';
 import crypto from 'crypto';
 
@@ -856,6 +856,49 @@ export class TelemetryHandler {
       `${participants.size} participants, ${fields.size} fields, ${actions.length} actions, ` +
       `accuracy: ${accuracy.toFixed(1)}%, score: ${collaborationScore.toFixed(1)}`
     )
+  }
+
+  /**
+   * Mark the last action on a field as having introduced a validation error
+   * (used when form submission reveals fields with errors)
+   */
+  async markFieldErrorAtSubmission(
+    sessionId: string,
+    cycleId: string,
+    fieldId: string
+  ): Promise<void> {
+    // Find the most recent action on this field in this cycle
+    const recentActions = await telemetryDb
+      .select()
+      .from(schemaTelemetry.telemetryActionSequences)
+      .where(
+        and(
+          eq(schemaTelemetry.telemetryActionSequences.sessionId, sessionId),
+          eq(schemaTelemetry.telemetryActionSequences.submissionCycleId, cycleId),
+          eq(schemaTelemetry.telemetryActionSequences.fieldId, fieldId)
+        )
+      )
+      .orderBy(desc(schemaTelemetry.telemetryActionSequences.timestamp))
+      .limit(1)
+
+    if (recentActions.length > 0) {
+      const lastAction = recentActions[0]
+
+      // Only mark as introduced error if it wasn't already marked
+      if (!lastAction.introducedValidationError) {
+        await telemetryDb
+          .update(schemaTelemetry.telemetryActionSequences)
+          .set({
+            introducedValidationError: true,
+          })
+          .where(eq(schemaTelemetry.telemetryActionSequences.id, lastAction.id))
+
+        console.log(
+          `[Telemetry] Marked field ${fieldId} last action as having error at submission ` +
+          `(action by ${lastAction.userName})`
+        )
+      }
+    }
   }
 }
 

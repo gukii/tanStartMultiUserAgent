@@ -611,9 +611,28 @@ class Room {
         this.broadcast({ type: 'FORM_CLEARED' })
         break
       case 'FORM_SUBMITTED': {
+        // Mark fields with validation errors at submission time
+        const fieldsWithErrors: string[] = []
+        for (const [fieldId, errorState] of this.validationErrors.entries()) {
+          if (errorState.hasError) {
+            fieldsWithErrors.push(fieldId)
+          }
+        }
+
         // End current submission cycle with metrics (async, non-blocking)
         const user = this.users.get(userId)
+        const cycleId = this.currentSubmissionCycleId
         setImmediate(() => {
+          // Mark actions on fields with errors at submission time
+          if (cycleId && fieldsWithErrors.length > 0) {
+            for (const fieldId of fieldsWithErrors) {
+              telemetryHandler.markFieldErrorAtSubmission(this.roomId, cycleId, fieldId).catch(err => {
+                console.error('[Room] Error marking field error at submission:', err)
+              })
+            }
+          }
+
+          // Then end the submission cycle
           this.endSubmissionCycle(userId, user?.name || userId).catch(err => {
             console.error('[Room] Error ending submission cycle:', err)
           })
