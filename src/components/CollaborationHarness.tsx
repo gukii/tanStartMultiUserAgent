@@ -1115,7 +1115,7 @@ export function CollaborationHarness({
         type: 'VALIDATION_STATUS',
         fieldId,
         hasError: true,
-        errorMessage: message,
+        errorMessage: target.validationMessage,
       })
     }
 
