@@ -803,6 +803,11 @@ export class TelemetryHandler {
     let errorsBrokeCount = 0
 
     // Mark final submitted values and error/fix status
+    console.log(
+      `[Telemetry] Processing ${finalFieldValues?.size || 0} fields for error/fix detection. ` +
+      `Previous errors: ${Array.from(previousErrors)}, Errors in cycle: ${Array.from(errorsInCycle)}, ` +
+      `Current errors: ${Array.from(currentErrorFields)}`
+    )
     if (finalFieldValues) {
       for (const [fieldId, finalValue] of finalFieldValues.entries()) {
         // Find the last action on this field in this cycle

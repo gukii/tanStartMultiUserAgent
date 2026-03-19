@@ -402,7 +402,7 @@ function AnalyticsPage() {
               <thead className="border-b border-gray-200 bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 font-semibold text-gray-700">User</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">Sessions</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Forms</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">Fields</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">Extended</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">Replaced</th>
@@ -712,6 +712,7 @@ function AnalyticsPage() {
                   <thead className="border-b border-gray-200 bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 font-semibold text-gray-700">Time</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">Form</th>
                       <th className="px-4 py-3 font-semibold text-gray-700">Submitted By</th>
                       <th className="px-4 py-3 font-semibold text-gray-700">Duration</th>
                       <th className="px-4 py-3 font-semibold text-gray-700">Fields</th>
@@ -735,6 +736,9 @@ function AnalyticsPage() {
                         >
                           <td className="px-4 py-3 text-gray-900">
                             {new Date(cycle.submittedAt * 1000).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-mono text-gray-600">{cycle.route}</span>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
