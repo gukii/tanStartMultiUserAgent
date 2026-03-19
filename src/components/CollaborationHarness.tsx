@@ -297,16 +297,18 @@ interface CollaborationContextValue {
   userColor: string
   cursorMessage: string
   submitMode: 'any' | 'consensus'
-  users: Record<string, { userId: string; name: string; color: string }>
+  users: Record<string, { userId: string; name: string; color: string; isAgent?: boolean }>
   readyStates: Record<string, boolean>
   markReady: () => void
   unmarkReady: () => void
+  clearAllReady: () => void
   updateUser: (name: string, color: string) => void
   setCursorMessage: (message: string) => void
   touchCursorMode: boolean
   setTouchCursorMode: (enabled: boolean) => void
   sendFormSubmit: () => void
   clearForm: () => void
+  broadcastServerErrors: (errors: Array<{ field: string; message: string }>) => void
 }
 
 const CollaborationContext = createContext<CollaborationContextValue | null>(null)
@@ -334,6 +336,7 @@ export function CollaborationHarness({
   onFormSubmit,
   onFormClear,
   onSubmitModeChange,
+  onServerValidationErrors,
   validationAnchor = 'auto',
   validationPosition = 'below',
 }: CollaborationHarnessProps) {
@@ -375,7 +378,42 @@ export function CollaborationHarness({
   const [touchCursorPosition, setTouchCursorPosition] = useState<{ x: number; y: number } | null>(null) // Visual cursor position for touch mode
   const fieldActivityTimestamps = useRef<Record<string, number>>({}) // Track last activity time per field per user (fieldId -> timestamp)
   const [evictionBlocked, setEvictionBlocked] = useState<string | null>(null) // Track which field eviction was blocked for (show visual feedback)
-  const [validationErrors, setValidationErrors] = useState<Array<{ fieldId: string; fieldLabel: string; message: string }>>([]) // Validation errors
+  const [validationErrors, setValidationErrors] = useState<Array<{ fieldId: string; fieldLabel: string; message: string }>>([]) // HTML5 validation errors
+  const [serverValidationErrors, setServerValidationErrors] = useState<Array<{ fieldId: string; fieldLabel: string; message: string }>>([]) // Server validation errors (broadcast to all peers)
+
+  // ------------------------------------------------------------------
+  // Apply server validation errors to form fields (aria-invalid styling)
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || serverValidationErrors.length === 0) return
+
+    // Apply styling to fields with errors
+    serverValidationErrors.forEach((error) => {
+      const field = container.querySelector(
+        `[name="${CSS.escape(error.fieldId)}"], [id="${CSS.escape(error.fieldId)}"]`
+      ) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+
+      if (field) {
+        field.setAttribute('aria-invalid', 'true')
+        field.classList.add('border-red-500', 'bg-red-50')
+      }
+    })
+
+    // Clean up when errors are cleared
+    return () => {
+      serverValidationErrors.forEach((error) => {
+        const field = container?.querySelector(
+          `[name="${CSS.escape(error.fieldId)}"], [id="${CSS.escape(error.fieldId)}"]`
+        ) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+
+        if (field) {
+          field.removeAttribute('aria-invalid')
+          field.classList.remove('border-red-500', 'bg-red-50')
+        }
+      })
+    }
+  }, [serverValidationErrors])
 
   // ------------------------------------------------------------------
   // Live semantic map via MutationObserver
@@ -696,6 +734,7 @@ export function CollaborationHarness({
           setDrafts({})
           setReadyStates({})
           setFieldLocks({})
+          setServerValidationErrors([])
 
           // Clear local field timestamps to prevent stale update rejection
           fieldTimestamps.current = {}
@@ -734,6 +773,50 @@ export function CollaborationHarness({
           // Notify parent component
           onFormClear?.()
 
+          break
+        }
+
+        case 'SERVER_VALIDATION_ERRORS': {
+          // A peer received server validation errors - broadcast to all so everyone sees them
+          console.log('[CollaborationHarness] SERVER_VALIDATION_ERRORS received:', msg.errors)
+
+          // If there are actual errors (not empty array for success), clear ready states
+          // so users can edit and resubmit
+          if (msg.errors.length > 0) {
+            console.log('[CollaborationHarness] Clearing ready states due to server validation errors')
+            send({ type: 'CLEAR_ALL_READY' })
+            setReadyStates({})
+          }
+
+          // Map errors to include user-friendly labels by reading from DOM
+          const container = containerRef.current
+          const errorsWithLabels = msg.errors.map((error: { field: string; message: string }) => {
+            let fieldLabel = error.field
+
+            // Try to find label in DOM for better UX
+            if (container && error.field !== '_form') {
+              const field = container.querySelector<HTMLElement>(
+                `[name="${CSS.escape(error.field)}"], [id="${CSS.escape(error.field)}"]`
+              )
+              if (field) {
+                const label = container.querySelector(`label[for="${field.id}"]`)
+                if (label) {
+                  fieldLabel = label.textContent?.replace('*', '').trim() || error.field
+                }
+              }
+            }
+
+            return {
+              fieldId: error.field,
+              fieldLabel,
+              message: error.message,
+            }
+          })
+
+          setServerValidationErrors(errorsWithLabels)
+
+          // Also call parent callback
+          onServerValidationErrors?.(msg.errors)
           break
         }
 
@@ -1058,6 +1141,7 @@ export function CollaborationHarness({
   // Validation error tracking
   // ------------------------------------------------------------------
   const [submitButtonElement, setSubmitButtonElement] = useState<HTMLElement | null>(null)
+  const [formSubmitAttempted, setFormSubmitAttempted] = useState(false)
 
   useEffect(() => {
     const container = containerRef.current
@@ -1084,6 +1168,7 @@ export function CollaborationHarness({
         fieldLabel = label.textContent?.replace('*', '').trim() || fieldId
       }
 
+      // Store the error but don't show it yet
       errors.set(fieldId, {
         fieldId,
         fieldLabel,
@@ -1096,19 +1181,23 @@ export function CollaborationHarness({
         foundSubmitButton = findValidationAnchor(form, validationAnchor)
       }
 
-      // Clear any pending update
-      if (pendingUpdate) {
-        clearTimeout(pendingUpdate)
-      }
-
-      // Update state after a brief delay to collect all errors
-      pendingUpdate = setTimeout(() => {
-        setValidationErrors(Array.from(errors.values()))
-        if (foundSubmitButton) {
-          setSubmitButtonElement(foundSubmitButton)
+      // Only show errors if form submission was attempted
+      // This prevents showing errors while users are typing
+      if (formSubmitAttempted) {
+        // Clear any pending update
+        if (pendingUpdate) {
+          clearTimeout(pendingUpdate)
         }
-        pendingUpdate = null
-      }, 50)
+
+        // Update state after a brief delay to collect all errors
+        pendingUpdate = setTimeout(() => {
+          setValidationErrors(Array.from(errors.values()))
+          if (foundSubmitButton) {
+            setSubmitButtonElement(foundSubmitButton)
+          }
+          pendingUpdate = null
+        }, 50)
+      }
 
       // Notify server of validation error for collaborative tracking
       send({
@@ -1120,13 +1209,30 @@ export function CollaborationHarness({
     }
 
     function onSubmit(e: Event) {
-      // Clear errors on successful submit
-      if (!(e.target as HTMLFormElement).checkValidity()) {
-        return // Form is invalid, errors will be shown by invalid handlers
+      // Mark that submission was attempted
+      setFormSubmitAttempted(true)
+
+      const form = e.target as HTMLFormElement
+
+      // If form is invalid, show the errors we've collected
+      if (!form.checkValidity()) {
+        // Trigger showing errors
+        setValidationErrors(Array.from(errors.values()))
+        if (foundSubmitButton) {
+          setSubmitButtonElement(foundSubmitButton)
+        }
+        return // Form is invalid, errors are now shown
       }
+
+      // Form is valid (HTML5) - clear HTML5 errors only
+      // Do NOT clear server validation errors here - the server hasn't validated yet!
+      // Server errors are cleared when:
+      // 1. Form is explicitly reset
+      // 2. Server responds with success (no errors in broadcastServerErrors)
       errors.clear()
       setValidationErrors([])
       setSubmitButtonElement(null)
+      setFormSubmitAttempted(false)
     }
 
     function onInput(e: Event) {
@@ -1135,10 +1241,19 @@ export function CollaborationHarness({
       if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return
 
       const fieldId = target.id || target.name
+
+      // CRITICAL FIX: Reset formSubmitAttempted as soon as user starts editing after a failed submission
+      // This prevents showing errors on every keystroke
+      if (formSubmitAttempted) {
+        setFormSubmitAttempted(false)
+      }
+
+      // Clear HTML5 validation error for this field
       if (fieldId && errors.has(fieldId)) {
         errors.delete(fieldId)
         const remainingErrors = Array.from(errors.values())
         setValidationErrors(remainingErrors)
+
         // Clear submit button reference if no more errors
         if (remainingErrors.length === 0) {
           setSubmitButtonElement(null)
@@ -1151,6 +1266,12 @@ export function CollaborationHarness({
           hasError: false,
         })
       }
+
+      // Don't clear server validation errors on input
+      // Server errors should only be cleared on:
+      // 1. Successful form submission
+      // 2. Explicit form reset
+      // 3. New submission attempt (errors from previous attempt are replaced)
     }
 
     // Listen for invalid events (capture phase to catch all)
@@ -1170,6 +1291,554 @@ export function CollaborationHarness({
     setValidationErrors([])
     setSubmitButtonElement(null)
   }, [currentSubmitMode])
+
+  // ------------------------------------------------------------------
+  // Server-side validation error detection (passive observer with DOM diffing)
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || disabled) return
+
+    let submissionCycleActive = false
+    let submissionSnapshot: Record<string, { value: string; userId: string; userName: string; isAgent: boolean }> = {}
+    let submissionTimeout: ReturnType<typeof setTimeout> | null = null
+    let preSubmitSnapshot: Map<string, {
+      styling: { color: string; borderColor: string; backgroundColor: string }
+      nearbyText: string[]
+      exists: boolean
+    }> | null = null
+    let currentRoute = typeof window !== 'undefined' ? window.location.pathname : ''
+    let mutationCount = 0
+    let lastMutationTime = 0
+    let previouslyErroredFields = new Set<string>() // Track which fields had errors in last submission
+
+    // Capture DOM state for a field
+    function captureFieldState(field: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, form: HTMLFormElement) {
+      const computed = window.getComputedStyle(field)
+      const styling = {
+        color: computed.color,
+        borderColor: computed.borderColor,
+        backgroundColor: computed.backgroundColor,
+      }
+
+      // Capture text nodes within 2 levels of this field, but ONLY within the form
+      // This excludes harness UI that's outside the form
+      const nearbyText: string[] = []
+      let current: HTMLElement | null = field.parentElement
+      let depth = 0
+      while (current && depth < 2 && form.contains(current)) {
+        Array.from(current.childNodes).forEach(node => {
+          // Only collect text that's inside the form, not harness UI
+          if (!form.contains(node)) return
+
+          if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent?.trim()
+            if (text) nearbyText.push(text)
+          } else if (node instanceof HTMLElement && node !== field) {
+            const text = node.textContent?.trim()
+            if (text && text.length < 200) nearbyText.push(text) // Avoid huge blocks
+          }
+        })
+        current = current.parentElement
+        depth++
+      }
+
+      return { styling, nearbyText, exists: true }
+    }
+
+    // Track submission cycle start
+    function onSubmitStart(e: Event) {
+      const form = e.target as HTMLFormElement
+      if (!form || !container.contains(form)) return
+
+      console.log('[Harness] Form submission detected, capturing snapshot')
+      console.log('[Harness] Form validity:', form.checkValidity())
+
+      // Capture snapshot of who last edited each field
+      submissionCycleActive = true
+      submissionSnapshot = {}
+      preSubmitSnapshot = new Map()
+      currentRoute = window.location.pathname
+      mutationCount = 0
+      lastMutationTime = Date.now()
+
+      const fields = form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+        'input, textarea, select'
+      )
+
+      fields.forEach((field) => {
+        const fieldId = field.getAttribute('name') || field.id
+        if (!fieldId) return
+
+        // Capture who last edited this field
+        const fieldValue = remoteFieldValues[fieldId]
+        if (fieldValue) {
+          const user = users[fieldValue.updatedBy]
+          submissionSnapshot[fieldId] = {
+            value: fieldValue.value,
+            userId: fieldValue.updatedBy,
+            userName: user?.name || fieldValue.updatedBy,
+            isAgent: user?.isAgent || false,
+          }
+        }
+
+        // Capture DOM state for this field (only within form boundaries)
+        preSubmitSnapshot.set(fieldId, captureFieldState(field, form))
+      })
+
+      // Clear any existing timeout
+      if (submissionTimeout) {
+        clearTimeout(submissionTimeout)
+      }
+
+      // End submission cycle after 5 seconds if no conclusion reached
+      // Extended timeout to give React useEffect time to apply aria-invalid
+      submissionTimeout = setTimeout(() => {
+        console.log('[Harness] Submission cycle timeout - no errors detected, assuming success')
+
+        // Track fixes - if we timeout with no errors after previous errors, assume they were fixed
+        if (previouslyErroredFields.size > 0) {
+          trackFieldFixes()
+        }
+
+        // Clear error tracking
+        previouslyErroredFields.clear()
+        submissionCycleActive = false
+        submissionSnapshot = {}
+        preSubmitSnapshot = null
+      }, 5000)
+    }
+
+    // Helper to find the nearest form field to an element (within form only)
+    function findNearestField(element: HTMLElement, form: HTMLFormElement): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null {
+      // Only search within the form boundaries, not in harness UI
+      if (!form.contains(element)) return null
+
+      // Check if element itself is a field
+      if (element instanceof HTMLInputElement ||
+          element instanceof HTMLTextAreaElement ||
+          element instanceof HTMLSelectElement) {
+        return element
+      }
+
+      // Check children
+      const childField = element.querySelector('input, textarea, select') as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+      if (childField && form.contains(childField)) return childField
+
+      // Check previous sibling (error message often appears after field)
+      let sibling = element.previousElementSibling
+      while (sibling && form.contains(sibling)) {
+        if (sibling instanceof HTMLInputElement ||
+            sibling instanceof HTMLTextAreaElement ||
+            sibling instanceof HTMLSelectElement) {
+          return sibling
+        }
+        const siblingField = sibling.querySelector('input, textarea, select') as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+        if (siblingField && form.contains(siblingField)) return siblingField
+        sibling = sibling.previousElementSibling
+      }
+
+      // Check parent's previous sibling (field might be in separate container)
+      const parent = element.parentElement
+      if (parent && form.contains(parent)) {
+        let parentSibling = parent.previousElementSibling
+        while (parentSibling && form.contains(parentSibling)) {
+          const field = parentSibling.querySelector('input, textarea, select') as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+          if (field && form.contains(field)) return field
+          parentSibling = parentSibling.previousElementSibling
+        }
+      }
+
+      // Check parent itself
+      if (parent && form.contains(parent)) {
+        const parentField = parent.querySelector('input, textarea, select') as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+        if (parentField && form.contains(parentField)) return parentField
+      }
+
+      return null
+    }
+
+    // Helper to check if text looks like an error message
+    function looksLikeError(text: string): boolean {
+      const errorKeywords = [
+        'error', 'invalid', 'required', 'failed', 'incorrect',
+        'must be', 'cannot', 'not allowed', 'please', 'check',
+        'wrong', 'missing', 'expired', 'declined'
+      ]
+      const lowerText = text.toLowerCase()
+      return errorKeywords.some(keyword => lowerText.includes(keyword))
+    }
+
+    // Helper to check if color is redish (moved up for reuse)
+    function isRedish(colorStr: string): boolean {
+      const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      if (!match) return false
+      const [, r, g, b] = match.map(Number)
+      return r > 150 && r > g * 1.5 && r > b * 1.5 // Red is dominant
+    }
+
+    // Helper to check if element has error styling (red colors)
+    function hasErrorStyling(element: HTMLElement): boolean {
+      const computed = window.getComputedStyle(element)
+      const color = computed.color
+      const borderColor = computed.borderColor
+      const backgroundColor = computed.backgroundColor
+
+      return isRedish(color) || isRedish(borderColor) || isRedish(backgroundColor)
+    }
+
+    // Observe DOM changes to detect server validation errors
+    const observer = new MutationObserver((mutations) => {
+      console.log('[Harness] MutationObserver fired, mutations:', mutations.length, 'submissionCycleActive:', submissionCycleActive)
+
+      if (!submissionCycleActive) {
+        console.log('[Harness] Ignoring mutations - submission cycle not active')
+        return
+      }
+
+      // Track that mutations are happening (response being processed)
+      mutationCount += mutations.length
+      lastMutationTime = Date.now()
+
+      console.log('[Harness] Processing mutations during active submission cycle')
+
+      // Check for route change (likely successful submission)
+      if (window.location.pathname !== currentRoute) {
+        console.log('[Harness] Route changed - likely successful submission')
+
+        // Track fixes - if fields previously had errors and submission succeeded, someone fixed them
+        if (previouslyErroredFields.size > 0) {
+          trackFieldFixes()
+        }
+
+        // Clear error tracking for successful submission
+        previouslyErroredFields.clear()
+        submissionCycleActive = false
+        submissionSnapshot = {}
+        preSubmitSnapshot = null
+        if (submissionTimeout) {
+          clearTimeout(submissionTimeout)
+          submissionTimeout = null
+        }
+        return
+      }
+
+      // Look for error indicators appearing after submission
+      const errorFields = new Set<string>()
+      console.log('[Harness] Checking mutations for error indicators...')
+
+      mutations.forEach((mutation) => {
+        // Strategy 1: Check for aria-invalid attribute changes (explicit)
+        if (mutation.type === 'attributes' && mutation.attributeName === 'aria-invalid') {
+          const target = mutation.target as HTMLElement
+          if (target instanceof HTMLInputElement ||
+              target instanceof HTMLTextAreaElement ||
+              target instanceof HTMLSelectElement) {
+            const isInvalid = target.getAttribute('aria-invalid') === 'true'
+            console.log('[Harness] aria-invalid detected:', target.getAttribute('name') || target.id, '=', isInvalid)
+            if (isInvalid) {
+              const fieldId = target.getAttribute('name') || target.id
+              if (fieldId) {
+                console.log('[Harness] Adding field to error list:', fieldId)
+                errorFields.add(fieldId)
+              }
+            }
+          }
+        }
+
+        // Strategy 2: Check for error classes being added
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          const target = mutation.target as HTMLElement
+          const classList = target.classList
+          const hasErrorClass = Array.from(classList).some(cls =>
+            cls.includes('error') || cls.includes('invalid') || cls.includes('danger')
+          )
+
+          if (hasErrorClass) {
+            // Try to find the associated field
+            let field: HTMLElement | null = null
+            if (target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                target instanceof HTMLSelectElement) {
+              field = target
+            } else {
+              field = target.querySelector('input, textarea, select')
+            }
+
+            if (field) {
+              const fieldId = field.getAttribute('name') || field.id
+              if (fieldId) errorFields.add(fieldId)
+            }
+          }
+        }
+
+        // Strategy 3: Check for error styling (red colors) being applied
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          const target = mutation.target as HTMLElement
+          if (hasErrorStyling(target)) {
+            // Try to find associated field
+            let field: HTMLElement | null = null
+            if (target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                target instanceof HTMLSelectElement) {
+              field = target
+            } else {
+              field = target.querySelector('input, textarea, select')
+            }
+
+            if (field) {
+              const fieldId = field.getAttribute('name') || field.id
+              if (fieldId) errorFields.add(fieldId)
+            }
+          }
+        }
+
+        // Strategy 4: Check for new DOM nodes with error text
+        if (mutation.type === 'childList') {
+          // Get the form element
+          const form = container.querySelector('form')
+          if (!form) return
+
+          mutation.addedNodes.forEach((node) => {
+            if (!(node instanceof HTMLElement)) return
+
+            // Only process nodes within the form
+            if (!form.contains(node)) return
+
+            const text = node.textContent || ''
+            if (looksLikeError(text)) {
+              // Find nearest form field
+              const field = findNearestField(node, form)
+              if (field) {
+                const fieldId = field.getAttribute('name') || field.id
+                if (fieldId) errorFields.add(fieldId)
+              }
+            }
+
+            // Also check if added node has error styling
+            if (hasErrorStyling(node)) {
+              const field = findNearestField(node, form)
+              if (field) {
+                const fieldId = field.getAttribute('name') || field.id
+                if (fieldId) errorFields.add(fieldId)
+              }
+            }
+          })
+        }
+      })
+
+      // If we detected errors via pattern matching, process immediately
+      if (errorFields.size > 0) {
+        processDetectedErrors(errorFields)
+      }
+
+      // Schedule snapshot comparison after mutations settle
+      if (submissionTimeout) {
+        clearTimeout(submissionTimeout)
+      }
+      submissionTimeout = setTimeout(() => {
+        // Mutations have settled for 1000ms - compare snapshots
+        // Extended delay to give React useEffect time to apply aria-invalid
+        if (submissionCycleActive && preSubmitSnapshot) {
+          compareSnapshotsAndDetectErrors()
+        }
+      }, 1000)
+    })
+
+    // Track field fixes - called when submission succeeds after previous errors
+    function trackFieldFixes() {
+      console.log('[Harness] Tracking fixes for previously errored fields:', Array.from(previouslyErroredFields))
+
+      previouslyErroredFields.forEach((fieldId) => {
+        const snapshot = submissionSnapshot[fieldId]
+        if (!snapshot) return
+
+        // Send telemetry - attribute fix to user who last edited this field
+        console.log('[Harness] Field fixed:', fieldId, 'by', snapshot.userName)
+        send({
+          type: 'VALIDATION_STATUS',
+          fieldId,
+          hasError: false,
+          errorMessage: undefined,
+        })
+      })
+    }
+
+    // Process detected errors (either from pattern matching or snapshot diff)
+    function processDetectedErrors(errorFieldIds: Set<string>) {
+      console.log('[Harness] processDetectedErrors called with fields:', Array.from(errorFieldIds))
+
+      // Clear timeout since we found errors
+      if (submissionTimeout) {
+        clearTimeout(submissionTimeout)
+        submissionTimeout = null
+      }
+
+      const errors: Array<{ fieldId: string; fieldLabel: string; message: string }> = []
+
+      errorFieldIds.forEach((fieldId) => {
+        const snapshot = submissionSnapshot[fieldId]
+        if (!snapshot) return
+
+        // Track this field as having an error for next submission cycle
+        previouslyErroredFields.add(fieldId)
+
+        // Get field label
+        const field = container.querySelector(`[name="${CSS.escape(fieldId)}"], [id="${CSS.escape(fieldId)}"]`)
+        let fieldLabel = fieldId
+        if (field) {
+          const label = container.querySelector(`label[for="${field.id}"]`)
+          if (label) {
+            fieldLabel = label.textContent?.replace('*', '').trim() || fieldId
+          }
+        }
+
+        errors.push({
+          fieldId,
+          fieldLabel,
+          message: 'Server validation failed',
+        })
+
+        // Send telemetry - attribute error to user who last edited this field
+        console.log('[Harness] Field broken:', fieldId, 'by', snapshot.userName)
+        send({
+          type: 'VALIDATION_STATUS',
+          fieldId,
+          hasError: true,
+          errorMessage: 'Server validation failed',
+        })
+      })
+
+      // Show summary notification below submit button
+      if (errors.length > 0) {
+        console.log('[Harness] Detected errors:', errors)
+        setValidationErrors(errors)
+        const form = container.querySelector('form')
+        const anchor = findValidationAnchor(form, validationAnchor)
+        if (anchor) {
+          setSubmitButtonElement(anchor)
+        }
+
+        // Clear all ready states so users can edit to fix errors
+        send({ type: 'CLEAR_ALL_READY' })
+        setReadyStates({})
+      }
+
+      // End submission cycle after processing errors
+      submissionCycleActive = false
+      submissionSnapshot = {}
+      preSubmitSnapshot = null
+    }
+
+    // Compare pre/post snapshots to detect errors by diffing
+    function compareSnapshotsAndDetectErrors() {
+      if (!preSubmitSnapshot) return
+
+      console.log('[Harness] Comparing DOM snapshots to detect changes')
+      const errorFieldIds = new Set<string>()
+
+      const form = container.querySelector('form')
+      if (!form) return
+
+      const fields = form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+        'input, textarea, select'
+      )
+
+      let significantChanges = false
+
+      fields.forEach((field) => {
+        const fieldId = field.getAttribute('name') || field.id
+        if (!fieldId) return
+
+        const preState = preSubmitSnapshot!.get(fieldId)
+        if (!preState) return // Field wasn't in original snapshot
+
+        const postState = captureFieldState(field, form)
+
+        // Compare styling - did field turn red? (must be a significant color change)
+        const preRed = isRedish(preState.styling.color) ||
+                       isRedish(preState.styling.borderColor) ||
+                       isRedish(preState.styling.backgroundColor)
+        const postRed = isRedish(postState.styling.color) ||
+                        isRedish(postState.styling.borderColor) ||
+                        isRedish(postState.styling.backgroundColor)
+
+        if (!preRed && postRed) {
+          console.log('[Harness] Field turned red:', fieldId)
+          errorFieldIds.add(fieldId)
+          significantChanges = true
+        }
+
+        // Compare nearby text - did error message appear with error keywords?
+        // Only compare text WITHIN the form, excluding harness UI
+        const newText = postState.nearbyText.filter(text => !preState.nearbyText.includes(text))
+        const errorMessages = newText.filter(text => looksLikeError(text))
+
+        if (errorMessages.length > 0) {
+          console.log('[Harness] Error message appeared near field (within form):', fieldId, errorMessages)
+          errorFieldIds.add(fieldId)
+          significantChanges = true
+        }
+      })
+
+      // Only process as errors if we found SIGNIFICANT changes (red fields or error text)
+      // Otherwise assume success - ignore minor DOM changes
+      if (errorFieldIds.size > 0 && significantChanges) {
+        processDetectedErrors(errorFieldIds)
+      } else {
+        if (!significantChanges) {
+          console.log('[Harness] No significant error indicators detected - assuming successful submission')
+        }
+
+        // Track fixes - if fields previously had errors and this submission succeeded, someone fixed them
+        if (previouslyErroredFields.size > 0) {
+          trackFieldFixes()
+        }
+
+        // Clear error tracking for successful submission
+        previouslyErroredFields.clear()
+        submissionCycleActive = false
+        submissionSnapshot = {}
+        preSubmitSnapshot = null
+      }
+    }
+
+    // Helper to check if color is redish
+    function isRedish(colorStr: string): boolean {
+      const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      if (!match) return false
+      const [, r, g, b] = match.map(Number)
+      return r > 150 && r > g * 1.5 && r > b * 1.5 // Red is dominant
+    }
+
+    // Start observing - only watch the form element, not the entire container
+    // This prevents detecting harness UI changes (validation errors, ready states, etc.)
+    const form = container.querySelector('form')
+    if (form) {
+      console.log('[Harness] Starting MutationObserver on form element')
+      observer.observe(form, {
+        attributes: true,
+        attributeFilter: ['aria-invalid', 'class', 'style'],
+        childList: true, // Watch for new error message nodes
+        subtree: true,
+        characterData: false, // Don't need text content changes
+      })
+    } else {
+      console.warn('[Harness] No form element found to observe!')
+    }
+
+    // Listen for submit events in CAPTURE phase
+    // CRITICAL: Must use capture phase to catch submit before form's onSubmit handler prevents it
+    container.addEventListener('submit', onSubmitStart, true)
+
+    return () => {
+      observer.disconnect()
+      container.removeEventListener('submit', onSubmitStart, true)
+      if (submissionTimeout) {
+        clearTimeout(submissionTimeout)
+      }
+    }
+  }, [disabled, remoteFieldValues, users, validationAnchor, send])
 
   // ------------------------------------------------------------------
   // Re-broadcast cursor when tab becomes visible (fixes throttling)
@@ -1698,6 +2367,13 @@ export function CollaborationHarness({
     }, 50)
   }, [send, userId, remoteFieldValues, fieldLocks, applyFieldUpdate])
 
+  const clearAllReady = useCallback(() => {
+    // Broadcast to server to clear all ready states
+    send({ type: 'CLEAR_ALL_READY' })
+    // Optimistically clear local state
+    setReadyStates({})
+  }, [send])
+
   const updateUser = useCallback((newName: string, newColor: string) => {
     setName(newName)
     setColor(newColor)
@@ -1735,6 +2411,47 @@ export function CollaborationHarness({
     // Also clear local state
     setRemoteFieldValues({})
     setDrafts({})
+    setReadyStates({})
+    setFieldLocks({})
+    setServerValidationErrors([])
+
+    // Clear local field timestamps to prevent stale update rejection
+    fieldTimestamps.current = {}
+
+    // Clear all DOM fields immediately (don't wait for server echo)
+    const formElements = document.querySelectorAll('form input, form textarea, form select')
+    formElements.forEach((element) => {
+      if (element instanceof HTMLInputElement) {
+        if (element.type === 'checkbox' || element.type === 'radio') {
+          element.checked = false
+        } else {
+          element.value = ''
+        }
+        const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+        const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+        inputEvent.__remoteOrigin = true
+        changeEvent.__remoteOrigin = true
+        element.dispatchEvent(inputEvent)
+        element.dispatchEvent(changeEvent)
+      } else if (element instanceof HTMLTextAreaElement) {
+        element.value = ''
+        const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+        const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+        inputEvent.__remoteOrigin = true
+        changeEvent.__remoteOrigin = true
+        element.dispatchEvent(inputEvent)
+        element.dispatchEvent(changeEvent)
+      } else if (element instanceof HTMLSelectElement) {
+        element.selectedIndex = 0
+        const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+        changeEvent.__remoteOrigin = true
+        element.dispatchEvent(changeEvent)
+      }
+    })
+  }, [send])
+
+  const broadcastServerErrors = useCallback((errors: Array<{ field: string; message: string }>) => {
+    send({ type: 'SERVER_VALIDATION_ERRORS', errors })
   }, [send])
 
   // ------------------------------------------------------------------
@@ -1752,14 +2469,16 @@ export function CollaborationHarness({
       readyStates,
       markReady,
       unmarkReady,
+      clearAllReady,
       updateUser,
       setCursorMessage,
       touchCursorMode,
       setTouchCursorMode,
       sendFormSubmit,
       clearForm,
+      broadcastServerErrors,
     }),
-    [connected, userId, name, color, cursorMessage, currentSubmitMode, users, readyStates, markReady, unmarkReady, updateUser, setCursorMessage, touchCursorMode, sendFormSubmit, clearForm],
+    [connected, userId, name, color, cursorMessage, currentSubmitMode, users, readyStates, markReady, unmarkReady, clearAllReady, updateUser, setCursorMessage, touchCursorMode, sendFormSubmit, clearForm, broadcastServerErrors],
   )
 
   // ------------------------------------------------------------------
@@ -1779,12 +2498,14 @@ export function CollaborationHarness({
       readyStates: {},
       markReady: () => {},
       unmarkReady: () => {},
+      clearAllReady: () => {},
       updateUser: () => {},
       setCursorMessage: () => {},
       touchCursorMode: false,
       setTouchCursorMode: () => {},
       sendFormSubmit: () => {},
       clearForm: () => {},
+      broadcastServerErrors: () => {},
     }),
     [],
   )
@@ -1875,14 +2596,34 @@ export function CollaborationHarness({
       )}
 
       {/* Validation error notification - positioned relative to anchor */}
-      {validationErrors.length > 0 && (validationPosition.startsWith('fixed') || submitButtonElement) && (
-        <ValidationErrorNotification
-          errors={validationErrors}
-          anchor={submitButtonElement}
-          position={validationPosition}
-          onDismiss={() => setValidationErrors([])}
-        />
-      )}
+      {/* Merges both HTML5 validation errors and server validation errors */}
+      {(() => {
+        // Deduplicate errors by fieldId - server errors override HTML5 errors
+        const errorMap = new Map<string, { fieldId: string; fieldLabel: string; message: string }>()
+
+        // Add HTML5 errors first
+        validationErrors.forEach(error => {
+          errorMap.set(error.fieldId, error)
+        })
+
+        // Add server errors (these override HTML5 errors for same field)
+        serverValidationErrors.forEach(error => {
+          errorMap.set(error.fieldId, error)
+        })
+
+        const allErrors = Array.from(errorMap.values())
+        return allErrors.length > 0 && (validationPosition.startsWith('fixed') || submitButtonElement) && (
+          <ValidationErrorNotification
+            errors={allErrors}
+            anchor={submitButtonElement}
+            position={validationPosition}
+            onDismiss={() => {
+              setValidationErrors([])
+              setServerValidationErrors([])
+            }}
+          />
+        )
+      })()}
 
       {/* Tiny connection-status dot */}
       <div

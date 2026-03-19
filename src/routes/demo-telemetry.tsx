@@ -17,7 +17,13 @@ import { SubmitControl } from '../components/SubmitControl'
 import { UserSettingsPanel } from '../components/UserSettingsPanel'
 import { FloatingCursorChat, type FloatingChatPosition } from '../components/FloatingCursorChat'
 import { getNormalBehavior } from '../lib/normalBehavior.server'
+import { submitCheckout } from '../lib/submitCheckout.server'
 import { faker } from '@faker-js/faker'
+
+interface ValidationError {
+  field: string
+  message: string
+}
 
 export const Route = createFileRoute('/demo-telemetry')({
   component: DemoTelemetryPage,
@@ -42,7 +48,8 @@ function CheckoutForm({
 }) {
   const [mounted, setMounted] = useState(false)
   const [formKey, setFormKey] = useState(0)
-  const { unmarkReady, clearForm, sendFormSubmit, userId, users } = useCollaboration()
+  const [submitting, setSubmitting] = useState(false)
+  const { unmarkReady, clearForm, sendFormSubmit, userId, users, broadcastServerErrors } = useCollaboration()
   const firstId = useId()
   const lastId = useId()
   const emailId = useId()
@@ -60,20 +67,15 @@ function CheckoutForm({
   }, [])
 
   function resetForm() {
-    // Clear server-side field values and drafts (this broadcasts FORM_CLEARED to all clients)
-    clearForm()
-
-    // Reset submitted state and mark that user has manually reset
+    // First, show the form (switch from success message to form)
     onReset()
-
-    // Clear who submitted
     setSubmittedBy(null)
-
-    // Clear ready state if in consensus mode
     unmarkReady()
 
-    // Force re-render by changing key
-    setFormKey((k) => k + 1)
+    // Then, after form is mounted, clear all fields
+    setTimeout(() => {
+      clearForm()
+    }, 50)
   }
 
   if (!mounted) {
@@ -110,22 +112,65 @@ function CheckoutForm({
     <form
       key={formKey}
       className="grid gap-4 sm:gap-6"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
+        // Note: By the time onSubmit fires, the browser has already run HTML5 validation
+        // If there were any invalid fields, the browser would have:
+        // 1. Fired 'invalid' events on those fields (CollaborationHarness captures these)
+        // 2. Shown error messages (via CollaborationHarness' ValidationErrorNotification)
+        // 3. Blocked this submit event from firing
+        // So if we reach here, the form is guaranteed to be valid (client-side).
+
+        // Prevent default form submission (we handle it with server function)
         e.preventDefault()
-        const form = e.currentTarget
 
-        // Note: By the time onSubmit fires, the browser has already run validation
-        // and fired 'invalid' events if needed. So we just need to check if it's valid.
-        if (!form.checkValidity()) {
-          // Form is invalid - validation events have already fired
-          // Just return to prevent submission
-          return
+        const formData = new FormData(e.currentTarget)
+        setSubmitting(true)
+
+        try {
+          // Convert FormData to typed object for server function
+          const data = {
+            firstName: formData.get('firstName') as string,
+            lastName: formData.get('lastName') as string,
+            email: formData.get('email') as string,
+            cardNumber: formData.get('cardNumber') as string,
+            expiry: formData.get('expiry') as string,
+            cvv: formData.get('cvv') as string,
+            address: formData.get('address') as string,
+            city: formData.get('city') as string,
+            country: formData.get('country') as string,
+            notes: formData.get('notes') as string || undefined,
+          }
+
+          // Call server function directly (type-safe, automatic serialization)
+          const result = await submitCheckout({ data })
+
+          console.log('[CheckoutForm] Server response:', result)
+
+          if (result.success) {
+            // Success - clear any previous errors and proceed with submission
+            broadcastServerErrors([]) // Clear errors for all peers
+            sendFormSubmit()
+            setSubmitted(true)
+            setSubmittedBy(userId)
+            console.log('[CheckoutForm] Order placed successfully:', result.orderId)
+          } else {
+            // Server validation failed
+            console.log('[CheckoutForm] Server validation failed, broadcasting errors:', result.errors)
+            const errors = result.errors || []
+            // Broadcast errors to all peers so everyone sees the validation feedback
+            broadcastServerErrors(errors)
+            console.log('[CheckoutForm] Errors broadcast to peers via harness')
+          }
+        } catch (error) {
+          console.error('[CheckoutForm] Submission error:', error)
+          // Show generic error without targeting specific field
+          broadcastServerErrors([{
+            field: '_form',
+            message: 'Network error. Please check your connection and try again.'
+          }])
+        } finally {
+          setSubmitting(false)
         }
-
-        // Form is valid - proceed with submission
-        sendFormSubmit()
-        setSubmitted(true)
-        setSubmittedBy(userId)
       }}
     >
       <fieldset className="grid gap-3 sm:gap-4 sm:grid-cols-2">
@@ -345,15 +390,32 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
 
   function fillAllFields() {
     // Generate realistic faker data for all fields
-    const expiryMonth = faker.string.numeric(2)
-    const expiryYear = faker.string.numeric(2)
+    // Generate valid future expiry date
+    const currentDate = new Date()
+    const currentYear = currentDate.getFullYear() % 100 // Last 2 digits
+    const currentMonth = currentDate.getMonth() + 1
+
+    // Generate a date 1-3 years in the future
+    const yearsAhead = faker.number.int({ min: 1, max: 3 })
+    const futureYear = (currentYear + yearsAhead) % 100
+    const expiryMonth = faker.number.int({ min: 1, max: 12 }).toString().padStart(2, '0')
+    const expiryYear = futureYear.toString().padStart(2, '0')
+
     const countries = ['US', 'DE', 'GB', 'FR', 'AU']
+
+    // Use test card numbers that are guaranteed to pass Luhn validation
+    const validTestCards = [
+      '4242 4242 4242 4242', // Visa
+      '5555 5555 5555 4444', // Mastercard
+      '3782 822463 10005',   // American Express
+      '6011 1111 1111 1117', // Discover
+    ]
 
     const formData = {
       firstName: faker.person.firstName(),
       lastName: faker.person.lastName(),
       email: faker.internet.email(),
-      cardNumber: faker.finance.creditCardNumber('#### #### #### ####'),
+      cardNumber: faker.helpers.arrayElement(validTestCards),
       expiry: `${expiryMonth}/${expiryYear}`,
       cvv: faker.string.numeric(3),
       address: faker.location.streetAddress(),
