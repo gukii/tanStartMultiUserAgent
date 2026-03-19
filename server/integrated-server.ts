@@ -140,7 +140,7 @@ class Room {
   private submitMode: 'any' | 'consensus' = 'any'
   private readyStates = new Map<string, boolean>()
   private fieldLocks = new Map<string, string>()
-  private validationErrors = new Map<string, { hasError: boolean; errorMessage?: string}>()
+  private validationErrors = new Map<string, { hasError: boolean; errorMessage?: string; lastEditedBy?: string }>()
   private clients = new Map<string, WebSocket>()
 
   // Edit buffering for action sequence grouping
@@ -617,6 +617,14 @@ class Room {
         this.readyStates.set(userId, false)
         this.broadcast({ type: 'READY_STATE_CHANGE', userId, isReady: false })
         break
+      case 'CLEAR_ALL_READY':
+        // Clear all ready states (e.g., when server validation fails)
+        this.readyStates.clear()
+        // Broadcast unmark for each user
+        this.users.forEach((user) => {
+          this.broadcast({ type: 'READY_STATE_CHANGE', userId: user.userId, isReady: false })
+        })
+        break
       case 'SET_SUBMIT_MODE':
         this.submitMode = msg.mode
         this.readyStates.clear()
@@ -630,6 +638,45 @@ class Room {
         console.log(`[Room ${this.roomId}] Form cleared by ${userId}`)
         // Broadcast to ALL clients (including the one who initiated)
         this.broadcast({ type: 'FORM_CLEARED' })
+        break
+      case 'SERVER_VALIDATION_ERRORS':
+        // A client received server validation errors - broadcast to all peers
+        console.log(`[Room ${this.roomId}] Broadcasting server validation errors from ${userId}`)
+
+        // Track server validation errors in validationErrors map for telemetry
+        // This ensures they're included when calculating which fields have errors at submission
+        if (msg.errors && msg.errors.length > 0) {
+          console.log(`[Room ${this.roomId}] Tracking ${msg.errors.length} server validation errors`)
+          for (const error of msg.errors) {
+            if (error.field && error.field !== '_form') {
+              this.validationErrors.set(error.field, {
+                hasError: true,
+                errorMessage: error.message,
+                lastEditedBy: userId,
+              })
+              console.log(`[Room ${this.roomId}] Tracked server error for field ${error.field}: ${error.message}`)
+
+              // Mark the last action on this field as introducing an error (for analytics)
+              if (this.currentSubmissionCycleId) {
+                setImmediate(() => {
+                  telemetryHandler.markFieldErrorAtSubmission(
+                    this.roomId,
+                    this.currentSubmissionCycleId!,
+                    error.field
+                  ).catch(err => {
+                    console.error(`[Room] Error marking field ${error.field} error:`, err)
+                  })
+                })
+              }
+            }
+          }
+        } else {
+          // Empty errors array means validation succeeded - clear all server errors
+          console.log(`[Room ${this.roomId}] Clearing validation errors (successful submission)`)
+          this.validationErrors.clear()
+        }
+
+        this.broadcast({ type: 'SERVER_VALIDATION_ERRORS', errors: msg.errors })
         break
       case 'FORM_SUBMITTED': {
         // Collect fields with validation errors at submission time
@@ -892,17 +939,28 @@ async function start() {
         target: `http://127.0.0.1:${TANSTACK_PORT}`,
         changeOrigin: true,
         ws: false, // Disable automatic WebSocket proxying - we handle it manually in server.on('upgrade')
-        filter: (pathname) => pathname !== '/health',
+        filter: (pathname) => {
+          const shouldProxy = pathname !== '/health'
+          console.log(`[Proxy Filter] ${pathname} -> ${shouldProxy ? 'PROXY' : 'SKIP'}`)
+          return shouldProxy
+        },
         onError: (err, req, res) => {
-          console.error('[Proxy] Error:', err.message)
+          console.error('[Proxy ERROR]', {
+            message: err.message,
+            code: (err as any).code,
+            url: req.url,
+            method: req.method,
+          })
           if (!res.headersSent) {
             res.status(502).json({ error: 'TanStack server not available' })
           }
         },
         onProxyReq: (proxyReq, req) => {
-          if (!IS_PRODUCTION) {
-            console.log(`[Proxy] ${req.method} ${req.url} -> TanStack:${TANSTACK_PORT}`)
-          }
+          console.log(`[Proxy REQ] ${req.method} ${req.url} -> http://127.0.0.1:${TANSTACK_PORT}${req.url}`)
+          console.log(`[Proxy REQ] Headers:`, req.headers)
+        },
+        onProxyRes: (proxyRes, req, res) => {
+          console.log(`[Proxy RES] ${req.method} ${req.url} <- Status: ${proxyRes.statusCode}`)
         },
       })
 
