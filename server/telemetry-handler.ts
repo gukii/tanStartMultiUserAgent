@@ -798,6 +798,10 @@ export class TelemetryHandler {
     // Collect fields that had errors at any point during this cycle (for fix detection)
     const errorsInCycle = fieldsWithErrorsInCycle || new Set<string>()
 
+    // Track counts for metrics (since we're updating the DB, the in-memory array won't reflect changes)
+    let errorsFixedCount = 0
+    let errorsBrokeCount = 0
+
     // Mark final submitted values and error/fix status
     if (finalFieldValues) {
       for (const [fieldId, finalValue] of finalFieldValues.entries()) {
@@ -826,12 +830,14 @@ export class TelemetryHandler {
           // Mark as "introduced error" if field has error now
           if (hasErrorNow) {
             updateData.introducedValidationError = true
+            errorsBrokeCount++
             console.log(`[Telemetry] Field ${fieldId} has validation error (action by ${lastAction.userName})`)
           }
 
           // Mark as "fixed error" if field had error before (in previous cycle OR in this cycle) but not anymore
           if ((hadErrorBefore || hadErrorInCycle) && !hasErrorNow) {
             updateData.fixedValidationError = true
+            errorsFixedCount++
             console.log(`[Telemetry] Field ${fieldId} error was fixed (action by ${lastAction.userName})`)
           }
 
@@ -862,8 +868,9 @@ export class TelemetryHandler {
       shorten: actions.filter(a => a.actionType === 'shorten').length,
     }
 
-    const errorsFixed = actions.filter(a => a.fixedValidationError).length
-    const errorsBroke = actions.filter(a => a.introducedValidationError).length
+    // Use counts from update loop (more accurate than filtering the stale in-memory array)
+    const errorsFixed = errorsFixedCount
+    const errorsBroke = errorsBrokeCount
 
     // Calculate accuracy: % of fields without errors
     const errorFieldsSet = new Set(

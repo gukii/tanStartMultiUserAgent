@@ -570,7 +570,7 @@ function AnalyticsPage() {
                                     {edit.fixedValidationError && (
                                       <span className="text-green-600 ml-1 font-bold" title="Fixed validation error">✓</span>
                                     )}
-                                    {edit.isFinalSubmittedValue && !edit.introducedValidationError && (
+                                    {edit.isFinalSubmittedValue && !edit.introducedValidationError && !edit.fixedValidationError && (
                                       <span className="text-gray-500 ml-1" title="Final submitted value">✓</span>
                                     )}
                                     {edit.introducedValidationError && (
@@ -837,7 +837,7 @@ function AnalyticsPage() {
                                                 {action.fixedValidationError && (
                                                   <span className="text-green-600 ml-1 font-bold" title="Fixed validation error">✓</span>
                                                 )}
-                                                {action.isFinalSubmittedValue && !action.introducedValidationError && (
+                                                {action.isFinalSubmittedValue && !action.introducedValidationError && !action.fixedValidationError && (
                                                   <span className="text-gray-500 ml-1" title="Final submitted value">✓</span>
                                                 )}
                                                 {action.introducedValidationError && (

@@ -345,8 +345,11 @@ class Room {
     if (prefixLen > 0 && suffixLen === 0) {
       if (afterMiddle.length > beforeMiddle.length) {
         return 'extend' // Added to the end
-      } else {
+      } else if (afterMiddle.length < beforeMiddle.length) {
         return 'shorten' // Removed from the end
+      } else {
+        // Same length but different characters - replacement
+        return 'replace'
       }
     }
 
@@ -361,8 +364,11 @@ class Room {
           // Text added at the start with deletions/changes
           return 'insert'
         }
-      } else {
+      } else if (afterMiddle.length < beforeMiddle.length) {
         return 'delete' // Removed from the start
+      } else {
+        // Same length but different characters - replacement
+        return 'replace'
       }
     }
 
