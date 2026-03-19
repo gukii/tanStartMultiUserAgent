@@ -775,7 +775,8 @@ export class TelemetryHandler {
     submittedBy: string,
     submittedByName: string,
     finalFieldValues?: Map<string, string>,
-    fieldsWithErrors?: Set<string>
+    fieldsWithErrors?: Set<string>,
+    fieldsWithErrorsInCycle?: Set<string>
   ): Promise<void> {
     // Get all actions for this cycle
     const actions = await telemetryDb
@@ -791,8 +792,11 @@ export class TelemetryHandler {
     // Get previous cycle's error fields
     const previousErrors = this.previousCycleErrors.get(sessionId) || new Set<string>()
 
-    // Collect current cycle's fields with errors (passed from integrated-server)
+    // Collect current cycle's fields with errors at submission time (should be empty if successful)
     const currentErrorFields = fieldsWithErrors || new Set<string>()
+
+    // Collect fields that had errors at any point during this cycle (for fix detection)
+    const errorsInCycle = fieldsWithErrorsInCycle || new Set<string>()
 
     // Mark final submitted values and error/fix status
     if (finalFieldValues) {
@@ -811,6 +815,7 @@ export class TelemetryHandler {
           // Determine error status
           const hasErrorNow = currentErrorFields.has(fieldId)
           const hadErrorBefore = previousErrors.has(fieldId)
+          const hadErrorInCycle = errorsInCycle.has(fieldId)
 
           const updateData: any = {}
 
@@ -824,8 +829,8 @@ export class TelemetryHandler {
             console.log(`[Telemetry] Field ${fieldId} has validation error (action by ${lastAction.userName})`)
           }
 
-          // Mark as "fixed error" if field had error before but not anymore
-          if (hadErrorBefore && !hasErrorNow) {
+          // Mark as "fixed error" if field had error before (in previous cycle OR in this cycle) but not anymore
+          if ((hadErrorBefore || hadErrorInCycle) && !hasErrorNow) {
             updateData.fixedValidationError = true
             console.log(`[Telemetry] Field ${fieldId} error was fixed (action by ${lastAction.userName})`)
           }

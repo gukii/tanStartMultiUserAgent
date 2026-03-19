@@ -141,6 +141,7 @@ class Room {
   private readyStates = new Map<string, boolean>()
   private fieldLocks = new Map<string, string>()
   private validationErrors = new Map<string, { hasError: boolean; errorMessage?: string; lastEditedBy?: string }>()
+  private fieldsWithErrorsInCurrentCycle = new Set<string>() // Track which fields had errors during this cycle (for fix detection)
   private clients = new Map<string, WebSocket>()
 
   // Edit buffering for action sequence grouping
@@ -393,7 +394,8 @@ class Room {
   private async endSubmissionCycle(
     submittedBy: string,
     submittedByName: string,
-    fieldsWithErrors: Set<string>
+    fieldsWithErrors: Set<string>,
+    fieldsWithErrorsInCycle: Set<string>
   ) {
     if (!this.currentSubmissionCycleId) return
 
@@ -405,7 +407,8 @@ class Room {
 
     console.log(
       `[Room ${this.roomId}] Ending submission cycle: ${this.currentSubmissionCycleId} by ${submittedByName} ` +
-      `(${fieldsWithErrors.size} fields with errors)`
+      `(${fieldsWithErrors.size} fields with errors at submission, ` +
+      `${fieldsWithErrorsInCycle.size} fields had errors during cycle)`
     )
 
     // Collect final field values at submission time
@@ -422,7 +425,8 @@ class Room {
         submittedBy,
         submittedByName,
         finalFieldValues,
-        fieldsWithErrors
+        fieldsWithErrors,
+        fieldsWithErrorsInCycle
       )
     } catch (error) {
       console.error('[Room] Error ending submission cycle:', error)
@@ -654,9 +658,12 @@ class Room {
                 errorMessage: error.message,
                 lastEditedBy: userId,
               })
+              // Track that this field had an error in this cycle (for fix detection)
+              this.fieldsWithErrorsInCurrentCycle.add(error.field)
               console.log(`[Room ${this.roomId}] Tracked server error for field ${error.field}: ${error.message}`)
 
               // Mark the last action on this field as introducing an error (for analytics)
+              // This happens immediately when server returns error, even if error is fixed later in same cycle
               if (this.currentSubmissionCycleId) {
                 setImmediate(() => {
                   telemetryHandler.markFieldErrorAtSubmission(
@@ -670,16 +677,14 @@ class Room {
               }
             }
           }
-        } else {
-          // Empty errors array means validation succeeded - clear all server errors
-          console.log(`[Room ${this.roomId}] Clearing validation errors (successful submission)`)
-          this.validationErrors.clear()
         }
+        // Note: We DON'T clear validationErrors when empty array is received
+        // The errors will be cleared after endSubmissionCycle processes them in FORM_SUBMITTED
 
         this.broadcast({ type: 'SERVER_VALIDATION_ERRORS', errors: msg.errors })
         break
       case 'FORM_SUBMITTED': {
-        // Collect fields with validation errors at submission time
+        // Collect fields with validation errors at submission time (should be empty if successful)
         const fieldsWithErrorsSet = new Set<string>()
         for (const [fieldId, errorState] of this.validationErrors.entries()) {
           if (errorState.hasError) {
@@ -687,13 +692,25 @@ class Room {
           }
         }
 
+        // Copy fieldsWithErrorsInCurrentCycle for telemetry (tracks all fields that had errors during cycle)
+        const fieldsWithErrorsInCycle = new Set(this.fieldsWithErrorsInCurrentCycle)
+
+        console.log(
+          `[Room ${this.roomId}] Form submitted: ${fieldsWithErrorsSet.size} current errors, ` +
+          `${fieldsWithErrorsInCycle.size} fields had errors in cycle`
+        )
+
         // End current submission cycle with metrics (async, non-blocking)
         const user = this.users.get(userId)
         setImmediate(() => {
-          this.endSubmissionCycle(userId, user?.name || userId, fieldsWithErrorsSet).catch(err => {
+          this.endSubmissionCycle(userId, user?.name || userId, fieldsWithErrorsSet, fieldsWithErrorsInCycle).catch(err => {
             console.error('[Room] Error ending submission cycle:', err)
           })
         })
+
+        // Clear tracking for next cycle
+        this.validationErrors.clear()
+        this.fieldsWithErrorsInCurrentCycle.clear()
 
         // Broadcast to all other peers that form was submitted
         this.broadcast({ type: 'FORM_SUBMITTED', userId })
