@@ -55,83 +55,39 @@ export function SubmitControl({
   // Track previous allReady state to detect when it transitions to true
   const prevAllReady = useRef(false)
 
-  // Handle marking ready with validation check
+  // Handle marking ready - NO validation check
+  // Validation only happens when form actually submits (all users ready)
   const handleMarkReady = () => {
-    // Find the form and validate it before marking ready
-    const form = document.querySelector('form')
-    if (!form) {
-      markReady()
-      return
-    }
-
-    // Check if form is valid
-    const isValid = form.checkValidity()
-
-    if (!isValid) {
-      // Form is invalid - manually trigger invalid events so CollaborationHarness can show errors
-      const formElements = form.querySelectorAll('input, textarea, select')
-      formElements.forEach((element) => {
-        if (element instanceof HTMLInputElement ||
-            element instanceof HTMLTextAreaElement ||
-            element instanceof HTMLSelectElement) {
-          if (!element.validity.valid) {
-            // Dispatch invalid event that CollaborationHarness will catch
-            // Note: bubbles must be true so event reaches the container element
-            const invalidEvent = new Event('invalid', { bubbles: true, cancelable: true })
-            element.dispatchEvent(invalidEvent)
-          }
-        }
-      })
-      return
-    }
-
-    // Form is valid, mark as ready
     markReady()
   }
 
   // Auto-submit in consensus mode when everyone becomes ready
   useEffect(() => {
     if (submitMode === 'consensus' && allReady && !prevAllReady.current && connected) {
-      // All peers just became ready - validate then broadcast submit
+      // All peers just became ready - trigger form submission
+      // Let form submit to server regardless of HTML5 validation
+      // Server will validate and return proper error messages
       const timer = setTimeout(() => {
         const form = document.querySelector('form')
 
-        // Double-check form validity before submitting
-        if (form && !form.checkValidity()) {
-          // Form is invalid - this shouldn't happen if everyone validated before marking ready
-          // but we check anyway as a safety measure
-          console.warn('[SubmitControl] Form validation failed during auto-submit')
+        if (!form) return
 
-          // Manually trigger invalid events for CollaborationHarness
-          const formElements = form.querySelectorAll('input, textarea, select')
-          formElements.forEach((element) => {
-            if (element instanceof HTMLInputElement ||
-                element instanceof HTMLTextAreaElement ||
-                element instanceof HTMLSelectElement) {
-              if (!element.validity.valid) {
-                // Note: bubbles must be true so event reaches the container element
-                const invalidEvent = new Event('invalid', { bubbles: true, cancelable: true })
-                element.dispatchEvent(invalidEvent)
-              }
-            }
-          })
-          return
-        }
+        console.log('[SubmitControl] All users ready, submitting to server')
 
-        // Form is valid, proceed with submission
-        sendFormSubmit()
+        // Don't check HTML5 validity - let server validate
+        // This ensures users get proper error messages from the server
+        // even if HTML5 validation is poorly implemented
 
-        // Trigger actual form submit
-        onSubmit?.()
-        if (form && !onSubmit) {
-          form.requestSubmit()
-        }
+        // Trigger submit event directly, bypassing HTML5 validation
+        // The form's onSubmit handler will handle the actual submission
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true })
+        form.dispatchEvent(submitEvent)
       }, 300) // Brief delay so users see the "all ready" state
 
       return () => clearTimeout(timer)
     }
     prevAllReady.current = allReady
-  }, [allReady, submitMode, connected, onSubmit, sendFormSubmit])
+  }, [allReady, submitMode, connected, onSubmit])
 
   // Wrap everything in a consistent container to prevent jank
   const content = (() => {

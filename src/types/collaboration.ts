@@ -122,6 +122,7 @@ export type ClientMessage =
   | { type: 'REJECT_DRAFT'; fieldId: string }
   | { type: 'MARK_READY' }
   | { type: 'UNMARK_READY' }
+  | { type: 'CLEAR_ALL_READY' }
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
   | { type: 'FORM_SUBMITTED' } // Notify all peers that form was submitted
   | { type: 'CLEAR_FORM' } // Clear all field values, drafts, and ready states
@@ -189,6 +190,8 @@ export interface CollaborationHarnessProps {
   onFormClear?: () => void
   /** Called when any peer changes the submit mode. */
   onSubmitModeChange?: (mode: 'any' | 'consensus') => void
+  /** Called when a peer receives server validation errors (broadcasts to all peers). */
+  onServerValidationErrors?: (errors: Array<{ field: string; message: string }>) => void
   /**
    * CSS selector or 'auto' to position validation errors.
    * Examples: '#submit-button', '[data-submit-anchor]', 'auto' (default)
