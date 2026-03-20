@@ -739,14 +739,14 @@ function AnalyticsPage() {
                           </td>
                           <td className="px-4 py-3">
                             <a
-                              href={`/${cycle.route.replace(/\//g, '-')}`}
+                              href={`/${cycle.route}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-sm font-mono text-blue-600 hover:text-blue-800 hover:underline"
                               onClick={(e) => e.stopPropagation()}
-                              title={`Open form: /${cycle.route.replace(/\//g, '-')}`}
+                              title={`Open form at /${cycle.route}`}
                             >
-                              {cycle.route}
+                              /{cycle.route}
                             </a>
                           </td>
                           <td className="px-4 py-3">

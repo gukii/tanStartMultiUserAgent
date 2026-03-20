@@ -198,8 +198,9 @@ export class TelemetryHandler {
     });
 
     if (!existing) {
-      // Extract route from roomId (e.g., "invoice-edit-123" -> "invoice/edit")
-      const route = roomId.split('-').slice(0, 2).join('/');
+      // Extract route from roomId (e.g., "room-demo-telemetry" -> "demo-telemetry")
+      // Remove the "room-" prefix to get the actual page path
+      const route = roomId.replace(/^room-/, '');
 
       await telemetryDb.insert(telemetrySessions).values({
         id: sessionId,
