@@ -738,7 +738,16 @@ function AnalyticsPage() {
                             {new Date(cycle.submittedAt * 1000).toLocaleString()}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-sm font-mono text-gray-600">{cycle.route}</span>
+                            <a
+                              href={`/${cycle.route.replace(/\//g, '-')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                              title={`Open form: /${cycle.route.replace(/\//g, '-')}`}
+                            >
+                              {cycle.route}
+                            </a>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
