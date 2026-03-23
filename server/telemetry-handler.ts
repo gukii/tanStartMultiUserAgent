@@ -749,6 +749,25 @@ export class TelemetryHandler {
    * Start a new submission cycle
    */
   async startSubmissionCycle(sessionId: string, cycleId: string): Promise<void> {
+    // Ensure session exists before creating cycle (to satisfy foreign key constraint)
+    const existingSession = await telemetryDb.query.telemetrySessions.findFirst({
+      where: eq(schemaTelemetry.telemetrySessions.id, sessionId),
+    })
+
+    if (!existingSession) {
+      // Create session if it doesn't exist
+      const route = sessionId.replace(/^room-/, '')
+      await telemetryDb.insert(schemaTelemetry.telemetrySessions).values({
+        id: sessionId,
+        roomId: sessionId,
+        route,
+        submitMode: 'any',
+        startedAt: new Date(),
+        totalParticipants: 0,
+      })
+      console.log(`[Telemetry] Created session: ${sessionId}`)
+    }
+
     await telemetryDb.insert(schemaTelemetry.telemetrySubmissionCycles).values({
       id: cycleId,
       sessionId,
@@ -841,15 +860,15 @@ export class TelemetryHandler {
     // Mark final submitted values and error/fix status
     if (finalFieldValues) {
       for (const [fieldId, finalValue] of finalFieldValues.entries()) {
-        // Find the last action on this field in this cycle
+        // Find all actions on this field in this cycle (sorted by time)
         const fieldActions = actions
           .filter(a => a.fieldId === fieldId)
-          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+          .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()) // Chronological order
 
         if (fieldActions.length > 0) {
-          const lastAction = fieldActions[0]
+          const lastAction = fieldActions[fieldActions.length - 1]
 
-          // Check if this action's valueAfter matches the final submitted value
+          // Check if last action's valueAfter matches the final submitted value
           const isFinalValue = lastAction.valueAfter === finalValue
 
           // Determine error status
@@ -857,42 +876,57 @@ export class TelemetryHandler {
           const hadErrorBefore = previousErrors.has(fieldId)
           const hadErrorInCycle = errorsInCycle.has(fieldId)
 
-          const updateData: any = {}
-
+          // Mark final submitted value flag on last action
           if (isFinalValue) {
-            updateData.isFinalSubmittedValue = true
+            await telemetryDb
+              .update(schemaTelemetry.telemetryActionSequences)
+              .set({ isFinalSubmittedValue: true })
+              .where(eq(schemaTelemetry.telemetryActionSequences.id, lastAction.id))
           }
 
-          // Mark as "introduced error" if field has error now
-          if (hasErrorNow) {
-            updateData.introducedValidationError = true
-            // Only increment if not already marked (to avoid double counting)
-            if (!lastAction.introducedValidationError) {
-              errorsBrokeCount++
+          // If field had error during cycle, mark the action(s) that introduced it
+          if (hadErrorInCycle) {
+            if (!hasErrorNow && fieldActions.length >= 2) {
+              // Error was fixed in this cycle
+              // Mark the second-to-last action as introducing the error
+              // (Last action is the one that fixed it)
+              const errorAction = fieldActions[fieldActions.length - 2]
+
+              if (!errorAction.introducedValidationError) {
+                await telemetryDb
+                  .update(schemaTelemetry.telemetryActionSequences)
+                  .set({ introducedValidationError: true })
+                  .where(eq(schemaTelemetry.telemetryActionSequences.id, errorAction.id))
+
+                errorsBrokeCount++
+                console.log(`[Telemetry] Field ${fieldId} error was INTRODUCED (action by ${errorAction.userName})`)
+              }
+            } else if (hasErrorNow) {
+              // Field still has error at submission - mark last action
+              if (!lastAction.introducedValidationError) {
+                await telemetryDb
+                  .update(schemaTelemetry.telemetryActionSequences)
+                  .set({ introducedValidationError: true })
+                  .where(eq(schemaTelemetry.telemetryActionSequences.id, lastAction.id))
+
+                errorsBrokeCount++
+                console.log(`[Telemetry] Field ${fieldId} has validation error (action by ${lastAction.userName})`)
+              }
             }
-            console.log(`[Telemetry] Field ${fieldId} has validation error (action by ${lastAction.userName})`)
           }
 
           // Mark as "fixed error" if field had error before (in previous cycle OR in this cycle) but not anymore
           if ((hadErrorBefore || hadErrorInCycle) && !hasErrorNow) {
-            updateData.fixedValidationError = true
+            await telemetryDb
+              .update(schemaTelemetry.telemetryActionSequences)
+              .set({ fixedValidationError: true })
+              .where(eq(schemaTelemetry.telemetryActionSequences.id, lastAction.id))
+
             errorsFixedCount++
             console.log(
               `[Telemetry] Field ${fieldId} error was FIXED (action by ${lastAction.userName}). ` +
               `hadErrorBefore=${hadErrorBefore}, hadErrorInCycle=${hadErrorInCycle}, hasErrorNow=${hasErrorNow}`
             )
-          } else {
-            console.log(
-              `[Telemetry] Field ${fieldId} NOT marked as fix (action by ${lastAction.userName}). ` +
-              `hadErrorBefore=${hadErrorBefore}, hadErrorInCycle=${hadErrorInCycle}, hasErrorNow=${hasErrorNow}`
-            )
-          }
-
-          if (Object.keys(updateData).length > 0) {
-            await telemetryDb
-              .update(schemaTelemetry.telemetryActionSequences)
-              .set(updateData)
-              .where(eq(schemaTelemetry.telemetryActionSequences.id, lastAction.id))
           }
         }
       }
