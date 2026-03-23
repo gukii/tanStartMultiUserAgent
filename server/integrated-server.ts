@@ -668,19 +668,9 @@ class Room {
               this.fieldsWithErrorsInCurrentCycle.add(error.field)
               console.log(`[Room ${this.roomId}] Tracked server error for field ${error.field}: ${error.message}`)
 
-              // Mark the last action on this field as introducing an error (for analytics)
-              // This happens immediately when server returns error, even if error is fixed later in same cycle
-              if (this.currentSubmissionCycleId) {
-                setImmediate(() => {
-                  telemetryHandler.markFieldErrorAtSubmission(
-                    this.roomId,
-                    this.currentSubmissionCycleId!,
-                    error.field
-                  ).catch(err => {
-                    console.error(`[Room] Error marking field ${error.field} error:`, err)
-                  })
-                })
-              }
+              // Note: We don't mark the error immediately here because the action sequences
+              // haven't been flushed from edit buffers yet. endSubmissionCycle will mark errors
+              // correctly after flushing buffers and creating action sequences in the database.
             }
           }
         }

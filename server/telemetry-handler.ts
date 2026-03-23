@@ -786,7 +786,34 @@ export class TelemetryHandler {
       .where(eq(schemaTelemetry.telemetryActionSequences.submissionCycleId, cycleId))
 
     if (actions.length === 0) {
-      console.log(`[Telemetry] No actions found for cycle ${cycleId}, skipping metrics`)
+      console.log(`[Telemetry] No actions found for cycle ${cycleId}, marking as submitted with zero metrics`)
+
+      // Still mark the cycle as submitted, even with no actions
+      // This prevents cycles from being invisible in analytics
+      await telemetryDb
+        .update(schemaTelemetry.telemetrySubmissionCycles)
+        .set({
+          submittedAt: new Date(),
+          durationMs: 0,
+          submittedBy,
+          submittedByName,
+          totalParticipants: 0,
+          totalFields: 0,
+          totalActions: 0,
+          actionsNew: 0,
+          actionsExtend: 0,
+          actionsInsert: 0,
+          actionsEdit: 0,
+          actionsReplace: 0,
+          actionsDelete: 0,
+          actionsShorten: 0,
+          errorsFixed: 0,
+          errorsBroke: 0,
+          accuracy: 0,
+          collaborationScore: 0,
+        })
+        .where(eq(schemaTelemetry.telemetrySubmissionCycles.id, cycleId))
+
       return
     }
 

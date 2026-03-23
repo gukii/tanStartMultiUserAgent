@@ -524,12 +524,13 @@ export const getSubmissionCycles = createServerFn({ method: 'GET' })
       const db = getDb()
 
       // Calculate time filter
-      const now = Date.now() / 1000
+      // Note: Database stores timestamps in milliseconds (mode: 'timestamp')
+      const now = Date.now() // Keep in milliseconds
       const timeRanges = {
-        '1h': now - 3600,
-        '24h': now - 86400,
-        '7d': now - 604800,
-        '30d': now - 2592000,
+        '1h': now - (60 * 60 * 1000),
+        '24h': now - (24 * 60 * 60 * 1000),
+        '7d': now - (7 * 24 * 60 * 60 * 1000),
+        '30d': now - (30 * 24 * 60 * 60 * 1000),
       }
       const startTime = timeRanges[options.timeRange]
 
