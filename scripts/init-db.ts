@@ -43,6 +43,18 @@ async function initDatabase() {
   }
 
   console.log('[DB Init] Database location:', dbPath)
+  console.log('[DB Init] Data directory:', dataDir)
+
+  // Verify directory is writable
+  try {
+    const { accessSync, constants } = await import('fs')
+    accessSync(dataDir, constants.W_OK)
+    console.log('[DB Init] ✓ Data directory is writable')
+  } catch (error: any) {
+    console.error('[DB Init] ✗ Data directory is not writable:', error.message)
+    console.error('[DB Init] Please check Railway volume mount configuration')
+    throw new Error(`Data directory ${dataDir} is not writable: ${error.message}`)
+  }
 
   // Check if database exists
   const dbExists = existsSync(dbPath)
@@ -50,10 +62,11 @@ async function initDatabase() {
 
   // Create client and run migrations
   try {
+    console.log('[DB Init] Creating database client...')
     const client = createClient({ url: TELEMETRY_DB_URL })
     const db = drizzle(client)
 
-    console.log('[DB Init] Running migrations...')
+    console.log('[DB Init] Running migrations from ./drizzle/migrations')
     await migrate(db, { migrationsFolder: './drizzle/migrations' })
 
     console.log('[DB Init] ✓ Database initialized successfully')
@@ -62,7 +75,14 @@ async function initDatabase() {
     if (error.message?.includes('already exists') || error.code === 'SQLITE_ERROR') {
       console.log('[DB Init] ✓ Database already initialized (tables exist)')
     } else {
-      console.error('[DB Init] ✗ Error initializing database:', error)
+      console.error('[DB Init] ✗ Error initializing database')
+      console.error('[DB Init] Error details:', {
+        message: error.message,
+        code: error.code,
+        dbPath,
+        dataDir,
+        dbExists,
+      })
       throw error
     }
   }
