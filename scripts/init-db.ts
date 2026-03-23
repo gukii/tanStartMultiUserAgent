@@ -26,12 +26,20 @@ async function initDatabase() {
   const dbPath = TELEMETRY_DB_URL.replace('file:', '')
   const dataDir = resolve(dbPath, '..')
 
-  // Ensure data directory exists
-  if (!existsSync(dataDir)) {
-    console.log('[DB Init] Creating data directory:', dataDir)
-    mkdirSync(dataDir, { recursive: true })
-  } else {
-    console.log('[DB Init] Data directory exists:', dataDir)
+  // Ensure data directory exists (with error handling for build phase)
+  try {
+    if (!existsSync(dataDir)) {
+      console.log('[DB Init] Creating data directory:', dataDir)
+      mkdirSync(dataDir, { recursive: true })
+    } else {
+      console.log('[DB Init] Data directory exists:', dataDir)
+    }
+  } catch (error: any) {
+    // During Railway build phase, persistent volumes aren't mounted yet
+    // Skip initialization and let it happen at runtime instead
+    console.log('[DB Init] Cannot create data directory (likely build phase):', error.message)
+    console.log('[DB Init] Skipping database initialization - will retry at runtime')
+    return
   }
 
   console.log('[DB Init] Database location:', dbPath)
