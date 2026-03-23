@@ -1,0 +1,17 @@
+# Nixpacks configuration for Railway
+# Prevents auto-detection and explicitly controls build process
+
+[phases.setup]
+nixPkgs = ["nodejs-20_x", "pnpm"]
+
+[phases.install]
+cmds = ["pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = [
+  # Set dummy database path for build phase (persistent volume not available yet)
+  "TELEMETRY_DB_URL=file:/tmp/build-dummy.db pnpm build"
+]
+
+[start]
+cmd = "pnpm start"
