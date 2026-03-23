@@ -14,18 +14,25 @@ import { migrate } from 'drizzle-orm/libsql/migrator'
 async function initDatabase() {
   console.log('[DB Init] Starting database initialization...')
 
+  // Use same environment-aware path logic as client.ts and drizzle.config.ts
+  const isProduction = process.env.NODE_ENV === 'production'
+  const TELEMETRY_DB_URL = process.env.TELEMETRY_DB_URL ||
+    (isProduction ? 'file:/app/data/telemetry.db' : 'file:./data/telemetry.db')
+
+  console.log(`[DB Init] Environment: ${isProduction ? 'production' : 'development'}`)
+  console.log('[DB Init] Database URL:', TELEMETRY_DB_URL)
+
+  // Extract directory path from URL (remove "file:" prefix)
+  const dbPath = TELEMETRY_DB_URL.replace('file:', '')
+  const dataDir = resolve(dbPath, '..')
+
   // Ensure data directory exists
-  const dataDir = resolve(process.cwd(), 'data')
   if (!existsSync(dataDir)) {
     console.log('[DB Init] Creating data directory:', dataDir)
     mkdirSync(dataDir, { recursive: true })
   } else {
     console.log('[DB Init] Data directory exists:', dataDir)
   }
-
-  // Database path
-  const dbPath = resolve(dataDir, 'telemetry.db')
-  const dbUrl = `file:${dbPath}`
 
   console.log('[DB Init] Database location:', dbPath)
 
@@ -35,7 +42,7 @@ async function initDatabase() {
 
   // Create client and run migrations
   try {
-    const client = createClient({ url: dbUrl })
+    const client = createClient({ url: TELEMETRY_DB_URL })
     const db = drizzle(client)
 
     console.log('[DB Init] Running migrations...')
