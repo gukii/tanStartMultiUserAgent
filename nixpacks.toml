@@ -2,7 +2,7 @@
 # Prevents auto-detection and explicitly controls build process
 
 [phases.setup]
-nixPkgs = ["nodejs-20_x", "pnpm"]
+nixPkgs = ["nodejs_20", "pnpm-9_x"]
 
 [phases.install]
 cmds = ["pnpm install --frozen-lockfile"]
