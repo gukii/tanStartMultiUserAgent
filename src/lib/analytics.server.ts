@@ -524,13 +524,13 @@ export const getSubmissionCycles = createServerFn({ method: 'GET' })
       const db = getDb()
 
       // Calculate time filter
-      // Note: Database stores timestamps in milliseconds (mode: 'timestamp')
-      const now = Date.now() // Keep in milliseconds
+      // Note: Database stores timestamps in SECONDS (mode: 'timestamp' in Drizzle uses Unix epoch seconds)
+      const now = Math.floor(Date.now() / 1000) // Convert to seconds
       const timeRanges = {
-        '1h': now - (60 * 60 * 1000),
-        '24h': now - (24 * 60 * 60 * 1000),
-        '7d': now - (7 * 24 * 60 * 60 * 1000),
-        '30d': now - (30 * 24 * 60 * 60 * 1000),
+        '1h': now - (60 * 60),
+        '24h': now - (24 * 60 * 60),
+        '7d': now - (7 * 24 * 60 * 60),
+        '30d': now - (30 * 24 * 60 * 60),
       }
       const startTime = timeRanges[options.timeRange]
 
