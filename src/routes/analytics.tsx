@@ -270,9 +270,9 @@ function AnalyticsPage() {
     const before = valueBefore.length > maxLength ? valueBefore.slice(0, maxLength) + '...' : valueBefore
     const after = valueAfter.length > maxLength ? valueAfter.slice(0, maxLength) + '...' : valueAfter
 
-    // New: show full text in green
+    // New: show full text in green bold
     if (actionType === 'new' || !before) {
-      return <span className="text-green-600">{after}</span>
+      return <span className="text-green-600 font-bold">{after}</span>
     }
 
     // Clear: show original in grey with strikethrough
@@ -280,8 +280,39 @@ function AnalyticsPage() {
       return <span className="text-gray-500 line-through">{before}</span>
     }
 
-    // Extend/Insert: original is contained in new text
-    if (actionType === 'extend' || actionType === 'insert') {
+    // Insert: find common prefix and suffix, highlight inserted part in middle
+    if (actionType === 'insert') {
+      // Find common prefix
+      let prefixLen = 0
+      const minLen = Math.min(before.length, after.length)
+      while (prefixLen < minLen && before[prefixLen] === after[prefixLen]) {
+        prefixLen++
+      }
+
+      // Find common suffix
+      let suffixLen = 0
+      while (
+        suffixLen < minLen - prefixLen &&
+        before[before.length - 1 - suffixLen] === after[after.length - 1 - suffixLen]
+      ) {
+        suffixLen++
+      }
+
+      const prefix = after.slice(0, prefixLen)
+      const inserted = after.slice(prefixLen, after.length - suffixLen)
+      const suffix = after.slice(after.length - suffixLen)
+
+      return (
+        <>
+          {prefix && <span className="text-gray-500">{prefix}</span>}
+          {inserted && <span className="text-green-600 font-bold">{inserted}</span>}
+          {suffix && <span className="text-gray-500">{suffix}</span>}
+        </>
+      )
+    }
+
+    // Extend: addition at start or end
+    if (actionType === 'extend') {
       const index = after.indexOf(before)
       if (index !== -1) {
         // Original text found in new text
@@ -289,9 +320,9 @@ function AnalyticsPage() {
         const afterPart = after.slice(index + before.length)
         return (
           <>
-            {beforePart && <span className="text-green-600">{beforePart}</span>}
+            {beforePart && <span className="text-green-600 font-bold">{beforePart}</span>}
             <span className="text-gray-500">{before}</span>
-            {afterPart && <span className="text-green-600">{afterPart}</span>}
+            {afterPart && <span className="text-green-600 font-bold">{afterPart}</span>}
           </>
         )
       }
@@ -326,7 +357,7 @@ function AnalyticsPage() {
     return (
       <>
         <span className="text-gray-500 line-through">{before}</span>
-        <span className="text-red-600"> {after}</span>
+        <span className="text-red-600 font-bold"> {after}</span>
       </>
     )
   }
