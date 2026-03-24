@@ -438,9 +438,8 @@ class Room {
       console.error('[Room] Error ending submission cycle:', error)
     }
 
-    // Start new cycle for next form
+    // Clear current cycle - new cycle will be created lazily on next edit
     this.currentSubmissionCycleId = null
-    await this.startNewSubmissionCycle()
   }
 
   addClient(userId: string, ws: WebSocket, queryParams: URLSearchParams) {
@@ -451,13 +450,8 @@ class Room {
     this.users.set(userId, user)
     this.clients.set(userId, ws)
 
-    // Start submission cycle if this is the first client in the room
-    if (this.users.size === 1 && !this.currentSubmissionCycleId) {
-      console.log(`[Room ${this.roomId}] First client connected, starting initial submission cycle`)
-      this.startNewSubmissionCycle().catch(err => {
-        console.error('[Room] Error starting initial submission cycle:', err)
-      })
-    }
+    // Note: Submission cycle is created lazily on first field edit, not on connection
+    // This prevents empty cycles from appearing in analytics when users just connect but don't edit
 
     const snapshot: RoomState = {
       users: Object.fromEntries(this.users),
