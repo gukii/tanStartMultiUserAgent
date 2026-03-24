@@ -938,8 +938,13 @@ function AnalyticsPage() {
                                             </td>
                                             <td className="px-3 py-2">
                                               <div className="flex items-center gap-1.5 flex-wrap">
-                                                <span className="font-semibold text-violet-600 text-xs whitespace-nowrap">
-                                                  {getInitials(action.userName)}:
+                                                {action.previousUserName && (
+                                                  <span className="inline-block rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-200 text-gray-700 whitespace-nowrap" title={action.previousUserName}>
+                                                    {getInitials(action.previousUserName)}
+                                                  </span>
+                                                )}
+                                                <span className="text-sm font-mono">
+                                                  {renderInlineDiff(action.valueBefore, action.valueAfter, action.actionType)}
                                                 </span>
                                                 <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap ${
                                                   action.actionType === 'new' ? 'bg-purple-100 text-purple-800' :
@@ -950,12 +955,9 @@ function AnalyticsPage() {
                                                   action.actionType === 'delete' ? 'bg-red-100 text-red-800' :
                                                   action.actionType === 'shorten' ? 'bg-amber-100 text-amber-800' :
                                                   action.actionType === 'clear' ? 'bg-gray-100 text-gray-800' :
-                                                  'text-gray-600'
-                                                }`}>
-                                                  {action.actionType}
-                                                </span>
-                                                <span className="text-sm font-mono">
-                                                  {renderInlineDiff(action.valueBefore, action.valueAfter, action.actionType)}
+                                                  'bg-gray-100 text-gray-800'
+                                                }`} title={action.userName}>
+                                                  {getInitials(action.userName)}
                                                 </span>
                                                 {action.fixedValidationError && (
                                                   <span className="text-green-600 ml-1 font-bold" title="Fixed validation error">✓</span>
