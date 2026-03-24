@@ -938,10 +938,16 @@ function AnalyticsPage() {
                                             </td>
                                             <td className="px-3 py-2">
                                               <div className="flex items-center gap-1.5 flex-wrap">
-                                                {action.actionType !== 'new' && action.previousUserName && (
-                                                  <span className="inline-block rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-300 text-gray-800 border border-gray-400 whitespace-nowrap" title={action.previousUserName}>
-                                                    {getInitials(action.previousUserName)}
-                                                  </span>
+                                                {action.actionType !== 'new' && (
+                                                  action.previousUserName ? (
+                                                    <span className="inline-block rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-300 text-gray-800 border border-gray-400 whitespace-nowrap" title={action.previousUserName}>
+                                                      {getInitials(action.previousUserName)}
+                                                    </span>
+                                                  ) : action.valueBefore ? (
+                                                    <span className="inline-block rounded px-1.5 py-0.5 text-xs font-semibold bg-blue-200 text-blue-900 border border-blue-400 whitespace-nowrap" title="AI Agent">
+                                                      AI
+                                                    </span>
+                                                  ) : null
                                                 )}
                                                 <span className="text-sm font-mono">
                                                   {renderInlineDiff(action.valueBefore, action.valueAfter, action.actionType)}
