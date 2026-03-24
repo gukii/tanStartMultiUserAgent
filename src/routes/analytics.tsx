@@ -938,24 +938,24 @@ function AnalyticsPage() {
                                             </td>
                                             <td className="px-3 py-2">
                                               <div className="flex items-center gap-1.5 flex-wrap">
-                                                {action.previousUserName && (
-                                                  <span className="inline-block rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-200 text-gray-700 whitespace-nowrap" title={action.previousUserName}>
+                                                {action.actionType !== 'new' && action.previousUserName && (
+                                                  <span className="inline-block rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-300 text-gray-800 border border-gray-400 whitespace-nowrap" title={action.previousUserName}>
                                                     {getInitials(action.previousUserName)}
                                                   </span>
                                                 )}
                                                 <span className="text-sm font-mono">
                                                   {renderInlineDiff(action.valueBefore, action.valueAfter, action.actionType)}
                                                 </span>
-                                                <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap ${
-                                                  action.actionType === 'new' ? 'bg-purple-100 text-purple-800' :
-                                                  action.actionType === 'extend' ? 'bg-green-100 text-green-800' :
-                                                  action.actionType === 'insert' ? 'bg-teal-100 text-teal-800' :
-                                                  action.actionType === 'edit' ? 'bg-orange-100 text-orange-800' :
-                                                  action.actionType === 'replace' ? 'bg-blue-100 text-blue-800' :
-                                                  action.actionType === 'delete' ? 'bg-red-100 text-red-800' :
-                                                  action.actionType === 'shorten' ? 'bg-amber-100 text-amber-800' :
-                                                  action.actionType === 'clear' ? 'bg-gray-100 text-gray-800' :
-                                                  'bg-gray-100 text-gray-800'
+                                                <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold border whitespace-nowrap ${
+                                                  action.actionType === 'new' ? 'bg-purple-200 text-purple-900 border-purple-400' :
+                                                  action.actionType === 'extend' ? 'bg-green-200 text-green-900 border-green-400' :
+                                                  action.actionType === 'insert' ? 'bg-teal-200 text-teal-900 border-teal-400' :
+                                                  action.actionType === 'edit' ? 'bg-orange-200 text-orange-900 border-orange-400' :
+                                                  action.actionType === 'replace' ? 'bg-blue-200 text-blue-900 border-blue-400' :
+                                                  action.actionType === 'delete' ? 'bg-red-200 text-red-900 border-red-400' :
+                                                  action.actionType === 'shorten' ? 'bg-amber-200 text-amber-900 border-amber-400' :
+                                                  action.actionType === 'clear' ? 'bg-gray-300 text-gray-900 border-gray-400' :
+                                                  'bg-gray-300 text-gray-900 border-gray-400'
                                                 }`} title={action.userName}>
                                                   {getInitials(action.userName)}
                                                 </span>
