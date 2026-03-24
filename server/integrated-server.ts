@@ -57,6 +57,7 @@ interface CursorState extends UserInfo, CursorPosition {
 interface FieldValue {
   value: string
   updatedBy: string
+  updatedByName: string
   updatedAt: number
 }
 
@@ -555,9 +556,9 @@ class Room {
         if (existing && msg.timestamp < existing.updatedAt) break
 
         const user = this.users.get(userId)
-        const previousUser = existing ? this.users.get(existing.updatedBy) : undefined
 
         // Buffer edit for action sequence grouping (replaces immediate telemetry)
+        // Use updatedByName from existing fieldValue (preserves name even if user disconnected)
         this.bufferEdit(
           msg.fieldId,
           userId,
@@ -565,7 +566,7 @@ class Room {
           msg.value,
           existing?.value || '',
           existing?.updatedBy,
-          previousUser?.name
+          existing?.updatedByName
         )
 
         // Also keep raw keystroke-level tracking for backwards compatibility
@@ -583,7 +584,7 @@ class Room {
                 existing.value,
                 msg.value,
                 existing.updatedBy,
-                previousUser?.name || existing.updatedBy,
+                existing.updatedByName,
                 hadValidationError,
                 editDurationMs
               )
@@ -593,7 +594,7 @@ class Room {
           })
         }
 
-        this.fieldValues.set(msg.fieldId, { value: msg.value, updatedBy: userId, updatedAt: msg.timestamp })
+        this.fieldValues.set(msg.fieldId, { value: msg.value, updatedBy: userId, updatedByName: user?.name || userId, updatedAt: msg.timestamp })
         this.broadcast({ type: 'REMOTE_FIELD_UPDATE', fieldId: msg.fieldId, value: msg.value, userId, timestamp: msg.timestamp }, userId)
         break
       }
