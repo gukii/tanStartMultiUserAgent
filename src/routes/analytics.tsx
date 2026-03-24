@@ -822,7 +822,16 @@ function AnalyticsPage() {
                                       </thead>
                                       <tbody className="divide-y divide-gray-100">
                                         {actionSequences.map((action) => (
-                                          <tr key={action.id} className="hover:bg-gray-50">
+                                          <tr
+                                            key={action.id}
+                                            className={`${
+                                              action.fixedValidationError
+                                                ? 'bg-green-50'
+                                                : action.introducedValidationError
+                                                ? 'bg-red-50'
+                                                : 'hover:bg-gray-50'
+                                            }`}
+                                          >
                                             <td className="px-3 py-2 text-gray-600">
                                               {new Date(action.timestamp * 1000).toLocaleTimeString()}
                                             </td>
