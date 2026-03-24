@@ -262,6 +262,75 @@ function AnalyticsPage() {
     return text.slice(0, maxLength) + '...'
   }
 
+  // Render inline diff with color coding
+  const renderInlineDiff = (valueBefore: string, valueAfter: string, actionType: string) => {
+    const maxLength = 50
+
+    // Truncate if too long
+    const before = valueBefore.length > maxLength ? valueBefore.slice(0, maxLength) + '...' : valueBefore
+    const after = valueAfter.length > maxLength ? valueAfter.slice(0, maxLength) + '...' : valueAfter
+
+    // New: show full text in green
+    if (actionType === 'new' || !before) {
+      return <span className="text-green-600">{after}</span>
+    }
+
+    // Clear: show original in grey with strikethrough
+    if (actionType === 'clear' || !after) {
+      return <span className="text-gray-500 line-through">{before}</span>
+    }
+
+    // Extend/Insert: original is contained in new text
+    if (actionType === 'extend' || actionType === 'insert') {
+      const index = after.indexOf(before)
+      if (index !== -1) {
+        // Original text found in new text
+        const beforePart = after.slice(0, index)
+        const afterPart = after.slice(index + before.length)
+        return (
+          <>
+            {beforePart && <span className="text-green-600">{beforePart}</span>}
+            <span className="text-gray-500">{before}</span>
+            {afterPart && <span className="text-green-600">{afterPart}</span>}
+          </>
+        )
+      }
+    }
+
+    // Shorten: part of original is removed
+    if (actionType === 'shorten' && before.startsWith(after)) {
+      const removed = before.slice(after.length)
+      return (
+        <>
+          <span className="text-gray-500">{after}</span>
+          <span className="text-red-600 line-through">{removed}</span>
+        </>
+      )
+    }
+
+    // Delete: similar to shorten
+    if (actionType === 'delete' && before.includes(after)) {
+      const index = before.indexOf(after)
+      const beforeRemoved = before.slice(0, index)
+      const afterRemoved = before.slice(index + after.length)
+      return (
+        <>
+          {beforeRemoved && <span className="text-red-600 line-through">{beforeRemoved}</span>}
+          <span className="text-gray-500">{after}</span>
+          {afterRemoved && <span className="text-red-600 line-through">{afterRemoved}</span>}
+        </>
+      )
+    }
+
+    // Replace/Edit: completely different text
+    return (
+      <>
+        <span className="text-gray-500 line-through">{before}</span>
+        <span className="text-red-600"> {after}</span>
+      </>
+    )
+  }
+
   // Group edits by session for compact display
   const groupEditsBySession = (edits: CollaborativeEdit[]) => {
     const sessions = new Map<string, {
@@ -813,9 +882,7 @@ function AnalyticsPage() {
                                         <tr>
                                           <th className="px-3 py-2 font-semibold text-gray-700">Time</th>
                                           <th className="px-3 py-2 font-semibold text-gray-700">Field</th>
-                                          <th className="px-3 py-2 font-semibold text-gray-700">Action</th>
-                                          <th className="px-3 py-2 font-semibold text-gray-700">Before</th>
-                                          <th className="px-3 py-2 font-semibold text-gray-700">After</th>
+                                          <th className="px-3 py-2 font-semibold text-gray-700">Change</th>
                                           <th className="px-3 py-2 font-semibold text-gray-700">Δ%</th>
                                           <th className="px-3 py-2 font-semibold text-gray-700">Duration</th>
                                         </tr>
@@ -839,11 +906,11 @@ function AnalyticsPage() {
                                               {action.fieldId}
                                             </td>
                                             <td className="px-3 py-2">
-                                              <div className="flex items-center gap-1">
-                                                <span className="font-semibold text-violet-600 text-xs">
+                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-semibold text-violet-600 text-xs whitespace-nowrap">
                                                   {getInitials(action.userName)}:
                                                 </span>
-                                                <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${
+                                                <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap ${
                                                   action.actionType === 'new' ? 'bg-purple-100 text-purple-800' :
                                                   action.actionType === 'extend' ? 'bg-green-100 text-green-800' :
                                                   action.actionType === 'insert' ? 'bg-teal-100 text-teal-800' :
@@ -856,6 +923,9 @@ function AnalyticsPage() {
                                                 }`}>
                                                   {action.actionType}
                                                 </span>
+                                                <span className="text-sm font-mono">
+                                                  {renderInlineDiff(action.valueBefore, action.valueAfter, action.actionType)}
+                                                </span>
                                                 {action.fixedValidationError && (
                                                   <span className="text-green-600 ml-1 font-bold" title="Fixed validation error">✓</span>
                                                 )}
@@ -866,12 +936,6 @@ function AnalyticsPage() {
                                                   <span className="text-red-600 ml-1 font-bold" title="Introduced validation error">✗</span>
                                                 )}
                                               </div>
-                                            </td>
-                                            <td className="px-3 py-2 text-gray-600 max-w-xs truncate" title={action.valueBefore}>
-                                              {truncateText(action.valueBefore, 30)}
-                                            </td>
-                                            <td className="px-3 py-2 text-gray-900 max-w-xs truncate font-medium" title={action.valueAfter}>
-                                              {truncateText(action.valueAfter, 30)}
                                             </td>
                                             <td className="px-3 py-2 text-gray-600">
                                               {action.valueChangePercent}%
