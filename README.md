@@ -107,6 +107,30 @@ See [UNIVERSAL_USAGE.md](./UNIVERSAL_USAGE.md) for detailed patterns and example
 - `party/server.ts` - PartyKit WebSocket server
 - `types/collaboration.ts` - Shared TypeScript types
 
+### Design Philosophy
+
+The CollaborationHarness is designed as a **universal, passive wrapper** that works with any form without requiring code modifications.
+
+**Universal Compatibility**: Works with any form regardless of:
+- Validation approach (HTML5, server-side, or none)
+- Submission method (server functions, API routes, traditional forms)
+- Complexity (basic forms to multi-step wizards)
+- Error handling (custom displays or none at all)
+
+**DOM Snapshot-Based Error Detection**: Detects form errors by observing DOM changes within the `<form>` tag, not through:
+- Hard-coded error messages
+- Customized error handling logic
+- Specific form structures
+- Knowledge of field names or validation rules
+
+**Passive Wrapper Pattern**: Wraps existing forms without touching their code:
+- Observes form state via DOM snapshots
+- Detects validation errors through DOM mutation observation
+- Shows fallback error messages when forms don't display their own
+- Never modifies the wrapped form's logic or structure
+
+**Testing Strategy**: The `src/routes/api/submit-checkout.ts` API route exists alongside server functions to ensure the harness maintains compatibility with both submission patterns.
+
 ### Message Flow
 
 ```
