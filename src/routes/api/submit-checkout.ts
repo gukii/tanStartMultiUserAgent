@@ -1,7 +1,13 @@
 /**
  * API Route: /api/submit-checkout
  *
- * Handles checkout form submission with server-side validation.
+ * Generic form submission endpoint for testing universal compatibility.
+ *
+ * Purpose: This API route exists alongside server functions to ensure
+ * CollaborationHarness maintains compatibility with both submission patterns.
+ * The harness is designed to work with any form submission mechanism without
+ * requiring code modifications.
+ *
  * Uses TanStack Start's server.handlers pattern for API endpoints.
  */
 
