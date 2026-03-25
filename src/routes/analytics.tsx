@@ -339,16 +339,33 @@ function AnalyticsPage() {
       )
     }
 
-    // Delete: similar to shorten
-    if (actionType === 'delete' && before.includes(after)) {
-      const index = before.indexOf(after)
-      const beforeRemoved = before.slice(0, index)
-      const afterRemoved = before.slice(index + after.length)
+    // Delete: find common prefix and suffix, highlight deleted part in middle
+    if (actionType === 'delete') {
+      // Find common prefix
+      let prefixLen = 0
+      const minLen = Math.min(before.length, after.length)
+      while (prefixLen < minLen && before[prefixLen] === after[prefixLen]) {
+        prefixLen++
+      }
+
+      // Find common suffix
+      let suffixLen = 0
+      while (
+        suffixLen < minLen - prefixLen &&
+        before[before.length - 1 - suffixLen] === after[after.length - 1 - suffixLen]
+      ) {
+        suffixLen++
+      }
+
+      const prefix = after.slice(0, prefixLen)
+      const deleted = before.slice(prefixLen, before.length - suffixLen)
+      const suffix = after.slice(after.length - suffixLen)
+
       return (
         <>
-          {beforeRemoved && <span className="text-red-600 line-through">{beforeRemoved}</span>}
-          <span className="text-gray-500">{after}</span>
-          {afterRemoved && <span className="text-red-600 line-through">{afterRemoved}</span>}
+          {prefix && <span className="text-gray-500">{prefix}</span>}
+          {deleted && <span className="text-red-600 line-through">{deleted}</span>}
+          {suffix && <span className="text-gray-500">{suffix}</span>}
         </>
       )
     }
