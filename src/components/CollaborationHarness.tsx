@@ -34,6 +34,7 @@ import { faker } from '@faker-js/faker'
 import { useMultiplayerMap } from '../hooks/useMultiplayerMap'
 import { GhostCursor } from './GhostCursor'
 import { AISuggestionBubble } from './AISuggestionBubble'
+import { AIAgentButtons } from './AIAgentButtons'
 import type {
   ClientMessage,
   CollaborationHarnessProps,
@@ -2537,6 +2538,16 @@ export function CollaborationHarness({
         data-collab-user={userId}
       >
       {children}
+
+      {/* AI Agent control buttons - appears right after form */}
+      <AIAgentButtons
+        roomId={resolvedRoomId}
+        pageSchema={pageSchema}
+        fieldValues={Object.fromEntries(
+          Array.from(fieldValues.entries()).map(([k, v]) => [k, v.value])
+        )}
+        disabled={disabled}
+      />
 
       {/* Ghost cursors for remote peers */}
       {Object.values(remoteCursors).map((cursor) => (

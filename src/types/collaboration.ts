@@ -48,6 +48,18 @@ export interface FieldSchema {
   ariaLabel: string
   /** Value of data-ai-intent attribute – guidance for the AI Agent */
   aiIntent?: string
+  /** Available options for <select> elements */
+  options?: string[]
+  /** Current field value (for "complete" mode) */
+  currentValue?: string
+  /** Whether field is required */
+  required?: boolean
+  /** Pattern attribute for validation */
+  pattern?: string
+  /** Min value for number/date inputs */
+  min?: string
+  /** Max value for number/date inputs */
+  max?: string
 }
 
 // ---------------------------------------------------------------------------

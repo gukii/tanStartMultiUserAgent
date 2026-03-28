@@ -43,6 +43,17 @@ function extractSchema(el: HTMLElement, index: number): FieldSchema {
 
   const aiIntentRaw = el.getAttribute('data-ai-intent')
 
+  // Extract options for select elements
+  let options: string[] | undefined
+  if (tag === 'select') {
+    options = Array.from(el.querySelectorAll('option'))
+      .map(opt => opt.value)
+      .filter(val => val) // Filter out empty values
+  }
+
+  // Extract current value
+  const currentValue = input.value || ''
+
   return {
     id,
     name,
@@ -51,6 +62,12 @@ function extractSchema(el: HTMLElement, index: number): FieldSchema {
     label: resolveLabel(el),
     ariaLabel: el.getAttribute('aria-label') ?? '',
     aiIntent: aiIntentRaw ?? undefined,
+    options,
+    currentValue: currentValue || undefined,
+    required: input.required || undefined,
+    pattern: input.pattern || undefined,
+    min: input.min || undefined,
+    max: input.max || undefined,
   }
 }
 
