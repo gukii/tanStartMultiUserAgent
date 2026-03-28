@@ -11,6 +11,8 @@
 
 import { createFileRoute } from '@tanstack/react-router'
 import { faker } from '@faker-js/faker'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 // Helper to create JSON responses
 function json(data: unknown, init?: ResponseInit) {
@@ -53,6 +55,33 @@ interface FieldSuggestion {
 
 interface SuggestionResponse {
   suggestions: FieldSuggestion[]
+}
+
+interface FieldMapping {
+  intent: string
+  description: string
+  exampleValues: string[]
+}
+
+interface FormContext {
+  analyzedAt: string
+  routes: Record<string, {
+    fields: Record<string, FieldMapping>
+  }>
+}
+
+/**
+ * Load form context from server/form-context.json
+ */
+function loadFormContext(): FormContext | null {
+  try {
+    const contextPath = join(process.cwd(), 'server', 'form-context.json')
+    const content = readFileSync(contextPath, 'utf-8')
+    return JSON.parse(content)
+  } catch {
+    // File doesn't exist or is invalid - fall back to faker
+    return null
+  }
 }
 
 /**
@@ -264,6 +293,10 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
       const body = (await request.json()) as SuggestionRequest
       const { fields, currentValues, mode } = body
 
+      // Load form context (LLM-generated mappings)
+      const formContext = loadFormContext()
+      const route = request.headers.get('referer')?.split(request.url.split('/').slice(0, 3).join('/'))[1]?.split('?')[0] || '/'
+
       const suggestions: FieldSuggestion[] = []
 
       for (const field of fields) {
@@ -282,16 +315,26 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
         // Mode: complete - validate and fix existing values, fill empty
         // For now, we'll implement simple fill. Future: add validation and fixing logic
 
-        // Infer intent
-        const intent = inferFieldIntent(field)
+        let value: string
+        let reasoning: string
 
-        // Generate value
-        const value = generateValue(intent, field)
+        // Try to use LLM-generated context first
+        const contextMapping = formContext?.routes[route]?.fields[field.id]
+        if (contextMapping && contextMapping.exampleValues.length > 0) {
+          // Use LLM-generated example value
+          value = faker.helpers.arrayElement(contextMapping.exampleValues)
+          reasoning = `From form context: "${contextMapping.description}"`
+        } else {
+          // Fall back to faker pattern matching
+          const intent = inferFieldIntent(field)
+          value = generateValue(intent, field)
+          reasoning = `Inferred as "${intent}" from field clues (no form context)`
+        }
 
         suggestions.push({
           fieldId: field.id,
           value,
-          reasoning: `Inferred as "${intent}" from field clues`,
+          reasoning,
         })
       }
 
