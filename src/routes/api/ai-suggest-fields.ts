@@ -282,69 +282,69 @@ function generateValue(intent: string, field: FieldSchema): string {
  * Route handler
  */
 export const Route = createFileRoute('/api/ai-suggest-fields')({
-  handler: async ({ request }) => {
-    // Check if AI agent is enabled
-    if (import.meta.env.VITE_ENABLE_AI_AGENT !== 'true') {
-      return json({ suggestions: [] })
-    }
-
-    if (request.method !== 'POST') {
-      return json({ error: 'Method not allowed' }, { status: 405 })
-    }
-
-    try {
-      const body = (await request.json()) as SuggestionRequest
-      const { fields, currentValues, mode } = body
-
-      // Load form context (LLM-generated mappings)
-      const formContext = await loadFormContext()
-      const route = request.headers.get('referer')?.split(request.url.split('/').slice(0, 3).join('/'))[1]?.split('?')[0] || '/'
-
-      const suggestions: FieldSuggestion[] = []
-
-      for (const field of fields) {
-        // Skip buttons
-        if (field.type === 'button' || field.type === 'submit') {
-          continue
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        // Check if AI agent is enabled
+        if (import.meta.env.VITE_ENABLE_AI_AGENT !== 'true') {
+          return json({ suggestions: [] })
         }
 
-        const currentValue = currentValues[field.id] || field.currentValue || ''
+        try {
+          const body = (await request.json()) as SuggestionRequest
+          const { fields, currentValues, mode } = body
 
-        // Mode: fill-empty - only fill empty fields
-        if (mode === 'fill-empty' && currentValue) {
-          continue
+          // Load form context (LLM-generated mappings)
+          const formContext = await loadFormContext()
+          const route = request.headers.get('referer')?.split(request.url.split('/').slice(0, 3).join('/'))[1]?.split('?')[0] || '/'
+
+          const suggestions: FieldSuggestion[] = []
+
+          for (const field of fields) {
+            // Skip buttons
+            if (field.type === 'button' || field.type === 'submit') {
+              continue
+            }
+
+            const currentValue = currentValues[field.id] || field.currentValue || ''
+
+            // Mode: fill-empty - only fill empty fields
+            if (mode === 'fill-empty' && currentValue) {
+              continue
+            }
+
+            // Mode: complete - validate and fix existing values, fill empty
+            // For now, we'll implement simple fill. Future: add validation and fixing logic
+
+            let value: string
+            let reasoning: string
+
+            // Try to use LLM-generated context first
+            const contextMapping = formContext?.routes[route]?.fields[field.id]
+            if (contextMapping && contextMapping.exampleValues.length > 0) {
+              // Use LLM-generated example value
+              value = faker.helpers.arrayElement(contextMapping.exampleValues)
+              reasoning = `From form context: "${contextMapping.description}"`
+            } else {
+              // Fall back to faker pattern matching
+              const intent = inferFieldIntent(field)
+              value = generateValue(intent, field)
+              reasoning = `Inferred as "${intent}" from field clues (no form context)`
+            }
+
+            suggestions.push({
+              fieldId: field.id,
+              value,
+              reasoning,
+            })
+          }
+
+          return json({ suggestions })
+        } catch (error) {
+          console.error('[AI Suggest Fields] Error:', error)
+          return json({ error: 'Internal server error' }, { status: 500 })
         }
-
-        // Mode: complete - validate and fix existing values, fill empty
-        // For now, we'll implement simple fill. Future: add validation and fixing logic
-
-        let value: string
-        let reasoning: string
-
-        // Try to use LLM-generated context first
-        const contextMapping = formContext?.routes[route]?.fields[field.id]
-        if (contextMapping && contextMapping.exampleValues.length > 0) {
-          // Use LLM-generated example value
-          value = faker.helpers.arrayElement(contextMapping.exampleValues)
-          reasoning = `From form context: "${contextMapping.description}"`
-        } else {
-          // Fall back to faker pattern matching
-          const intent = inferFieldIntent(field)
-          value = generateValue(intent, field)
-          reasoning = `Inferred as "${intent}" from field clues (no form context)`
-        }
-
-        suggestions.push({
-          fieldId: field.id,
-          value,
-          reasoning,
-        })
-      }
-
-      return json({ suggestions })
-    } catch (error) {
-      console.error('[AI Suggest Fields] Error:', error)
-      return json({ error: 'Internal server error' }, { status: 500 })
-    }
+      },
+    },
   },
 })
