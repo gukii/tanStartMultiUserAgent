@@ -25,6 +25,8 @@ import {
   useMemo,
   useRef,
   useState,
+  lazy,
+  Suspense,
   type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
@@ -34,7 +36,9 @@ import { faker } from '@faker-js/faker'
 import { useMultiplayerMap } from '../hooks/useMultiplayerMap'
 import { GhostCursor } from './GhostCursor'
 import { AISuggestionBubble } from './AISuggestionBubble'
-import { AIAgentButtons } from './AIAgentButtons'
+
+// Lazy load AI Agent buttons (modular feature)
+const AIAgentButtons = lazy(() => import('./AIAgentButtons').then(m => ({ default: m.AIAgentButtons })))
 import type {
   ClientMessage,
   CollaborationHarnessProps,
@@ -2539,15 +2543,19 @@ export function CollaborationHarness({
       >
       {children}
 
-      {/* AI Agent control buttons - appears right after form */}
-      <AIAgentButtons
-        roomId={resolvedRoomId}
-        pageSchema={pageSchema}
-        fieldValues={Object.fromEntries(
-          Array.from(fieldValues.entries()).map(([k, v]) => [k, v.value])
-        )}
-        disabled={disabled}
-      />
+      {/* AI Agent control buttons - appears right after form (modular feature) */}
+      {import.meta.env.VITE_ENABLE_AI_AGENT === 'true' && !disabled && (
+        <Suspense fallback={null}>
+          <AIAgentButtons
+            roomId={resolvedRoomId}
+            pageSchema={pageSchema}
+            fieldValues={Object.fromEntries(
+              Array.from(fieldValues.entries()).map(([k, v]) => [k, v.value])
+            )}
+            disabled={disabled}
+          />
+        </Suspense>
+      )}
 
       {/* Ghost cursors for remote peers */}
       {Object.values(remoteCursors).map((cursor) => (

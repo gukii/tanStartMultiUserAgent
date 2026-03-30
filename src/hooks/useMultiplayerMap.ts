@@ -43,18 +43,7 @@ function extractSchema(el: HTMLElement, index: number): FieldSchema {
 
   const aiIntentRaw = el.getAttribute('data-ai-intent')
 
-  // Extract options for select elements
-  let options: string[] | undefined
-  if (tag === 'select') {
-    options = Array.from(el.querySelectorAll('option'))
-      .map(opt => opt.value)
-      .filter(val => val) // Filter out empty values
-  }
-
-  // Extract current value
-  const currentValue = input.value || ''
-
-  return {
+  const baseSchema: FieldSchema = {
     id,
     name,
     type,
@@ -62,13 +51,33 @@ function extractSchema(el: HTMLElement, index: number): FieldSchema {
     label: resolveLabel(el),
     ariaLabel: el.getAttribute('aria-label') ?? '',
     aiIntent: aiIntentRaw ?? undefined,
-    options,
-    currentValue: currentValue || undefined,
-    required: input.required || undefined,
-    pattern: input.pattern || undefined,
-    min: input.min || undefined,
-    max: input.max || undefined,
   }
+
+  // Only extract additional fields if AI agent is enabled (modular feature)
+  if (import.meta.env.VITE_ENABLE_AI_AGENT === 'true') {
+    // Extract options for select elements
+    let options: string[] | undefined
+    if (tag === 'select') {
+      options = Array.from(el.querySelectorAll('option'))
+        .map(opt => opt.value)
+        .filter(val => val) // Filter out empty values
+    }
+
+    // Extract current value
+    const currentValue = input.value || ''
+
+    return {
+      ...baseSchema,
+      options,
+      currentValue: currentValue || undefined,
+      required: input.required || undefined,
+      pattern: input.pattern || undefined,
+      min: input.min || undefined,
+      max: input.max || undefined,
+    }
+  }
+
+  return baseSchema
 }
 
 // ---------------------------------------------------------------------------
