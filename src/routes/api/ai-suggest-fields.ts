@@ -294,6 +294,12 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
           const body = (await request.json()) as SuggestionRequest
           const { fields, currentValues, mode } = body
 
+          console.log('[API] ai-suggest-fields request:', {
+            mode,
+            fieldCount: fields.length,
+            fields: fields.map(f => ({ id: f.id, type: f.type, label: f.label }))
+          })
+
           // Load form context (LLM-generated mappings)
           const formContext = await loadFormContext()
           const route = request.headers.get('referer')?.split(request.url.split('/').slice(0, 3).join('/'))[1]?.split('?')[0] || '/'
@@ -338,6 +344,11 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
               reasoning,
             })
           }
+
+          console.log('[API] Returning suggestions:', {
+            count: suggestions.length,
+            suggestions: suggestions.map(s => ({ fieldId: s.fieldId, value: s.value.slice(0, 20) }))
+          })
 
           return json({ suggestions })
         } catch (error) {

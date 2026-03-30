@@ -32,6 +32,12 @@ export function AIAgentButtons({
     setLoading(true)
     setStatus(`${mode === 'fill-empty' ? 'Filling empty fields' : 'Completing fields'}...`)
 
+    console.log('[AIAgentButtons] fillFields called:', {
+      mode,
+      fieldCount: pageSchema.length,
+      fields: pageSchema.map(f => ({ id: f.id, type: f.type, label: f.label }))
+    })
+
     try {
       // Call API to get suggestions
       const response = await fetch('/api/ai-suggest-fields', {
