@@ -28,12 +28,7 @@ export function AIAgentButtons({
   const [status, setStatus] = useState<string>('')
   const [loading, setLoading] = useState(false)
 
-  // Check if AI agent is enabled
-  const isEnabled = import.meta.env.VITE_ENABLE_AI_AGENT === 'true'
-
-  if (!isEnabled || disabled) {
-    return null
-  }
+  console.log('[AIAgentButtons] Rendering with:', { roomId, fieldCount: pageSchema.length, disabled })
 
   async function fillFields(mode: 'fill-empty' | 'complete') {
     setLoading(true)
