@@ -2544,14 +2544,7 @@ export function CollaborationHarness({
       {children}
 
       {/* AI Agent control buttons - appears right after form (modular feature) */}
-      {(() => {
-        console.log('[CollaborationHarness] AI Agent check:', {
-          enabled: import.meta.env.VITE_ENABLE_AI_AGENT,
-          disabled,
-          shouldRender: import.meta.env.VITE_ENABLE_AI_AGENT === 'true' && !disabled
-        })
-        return import.meta.env.VITE_ENABLE_AI_AGENT === 'true' && !disabled
-      })() && (
+      {import.meta.env.VITE_ENABLE_AI_AGENT === 'true' && !disabled && (
         <Suspense fallback={null}>
           <AIAgentButtons
             roomId={resolvedRoomId}

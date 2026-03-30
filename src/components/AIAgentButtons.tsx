@@ -28,8 +28,6 @@ export function AIAgentButtons({
   const [status, setStatus] = useState<string>('')
   const [loading, setLoading] = useState(false)
 
-  console.log('[AIAgentButtons] Rendering with:', { roomId, fieldCount: pageSchema.length, disabled })
-
   async function fillFields(mode: 'fill-empty' | 'complete') {
     setLoading(true)
     setStatus(`${mode === 'fill-empty' ? 'Filling empty fields' : 'Completing fields'}...`)
