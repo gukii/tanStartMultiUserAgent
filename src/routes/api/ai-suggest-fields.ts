@@ -11,8 +11,6 @@
 
 import { createFileRoute } from '@tanstack/react-router'
 import { faker } from '@faker-js/faker'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 
 // Helper to create JSON responses
 function json(data: unknown, init?: ResponseInit) {
@@ -72,9 +70,14 @@ interface FormContext {
 
 /**
  * Load form context from server/form-context.json
+ * Uses dynamic imports to avoid bundling Node.js modules for browser
  */
-function loadFormContext(): FormContext | null {
+async function loadFormContext(): Promise<FormContext | null> {
   try {
+    // Dynamic import to avoid bundling fs/path for browser
+    const { readFileSync } = await import('fs')
+    const { join } = await import('path')
+
     const contextPath = join(process.cwd(), 'server', 'form-context.json')
     const content = readFileSync(contextPath, 'utf-8')
     return JSON.parse(content)
@@ -294,7 +297,7 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
       const { fields, currentValues, mode } = body
 
       // Load form context (LLM-generated mappings)
-      const formContext = loadFormContext()
+      const formContext = await loadFormContext()
       const route = request.headers.get('referer')?.split(request.url.split('/').slice(0, 3).join('/'))[1]?.split('?')[0] || '/'
 
       const suggestions: FieldSuggestion[] = []
