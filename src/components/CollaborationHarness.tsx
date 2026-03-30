@@ -2550,7 +2550,7 @@ export function CollaborationHarness({
             roomId={resolvedRoomId}
             pageSchema={pageSchema}
             fieldValues={Object.fromEntries(
-              Array.from(fieldValues.entries()).map(([k, v]) => [k, v.value])
+              Object.entries(remoteFieldValues).map(([k, v]) => [k, v.value])
             )}
             disabled={disabled}
           />
