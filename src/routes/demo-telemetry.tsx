@@ -622,18 +622,21 @@ function DemoTelemetryPage() {
   }, [])
 
   // Load floating chat position from localStorage, default to bottom-left
-  const [floatingChatPosition, setFloatingChatPositionState] = useState<FloatingChatPosition>(() => {
-    if (typeof window === 'undefined') return 'bottom-left'
+  // Use same default for SSR and initial client render to avoid hydration mismatch
+  const [floatingChatPosition, setFloatingChatPositionState] = useState<FloatingChatPosition>('bottom-left')
+
+  // Load from localStorage after hydration (useEffect only runs on client)
+  useEffect(() => {
     const saved = localStorage.getItem('floatingChatPosition')
-    return (saved as FloatingChatPosition) || 'bottom-left'
-  })
+    if (saved) {
+      setFloatingChatPositionState(saved as FloatingChatPosition)
+    }
+  }, [])
 
   // Persist position to localStorage
   const setFloatingChatPosition = (position: FloatingChatPosition) => {
     setFloatingChatPositionState(position)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('floatingChatPosition', position)
-    }
+    localStorage.setItem('floatingChatPosition', position)
   }
 
   return (
