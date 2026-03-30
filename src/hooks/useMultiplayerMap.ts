@@ -108,14 +108,27 @@ export function useMultiplayerMap(
 
   const scan = useCallback(() => {
     const container = containerRef.current
-    if (!container) return
+    if (!container) {
+      console.log('[useMultiplayerMap] No container ref')
+      return
+    }
 
     const elements = container.querySelectorAll<HTMLElement>(
       'input, textarea, button, select, [contenteditable]',
     )
 
+    console.log('[useMultiplayerMap] Scanning:', {
+      elementsFound: elements.length,
+      containerTag: container.tagName
+    })
+
     const schema: FieldSchema[] = []
     elements.forEach((el, i) => schema.push(extractSchema(el, i)))
+
+    console.log('[useMultiplayerMap] Schema extracted:', {
+      count: schema.length,
+      fields: schema.map(f => ({ id: f.id, type: f.type, label: f.label }))
+    })
 
     setPageSchema(schema)
     onSchemaChangeRef.current?.(schema)
