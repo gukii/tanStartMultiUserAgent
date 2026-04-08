@@ -42,7 +42,7 @@ interface FieldSchema {
 interface SuggestionRequest {
   fields: FieldSchema[]
   currentValues: Record<string, string>
-  mode: 'fill-empty' | 'complete'
+  mode: 'fill-empty' | 'complete' | 'single-field'
 }
 
 interface FieldSuggestion {
@@ -88,35 +88,124 @@ async function loadFormContext(): Promise<FormContext | null> {
 }
 
 /**
- * Infer field intent from all available clues
- * Supports English and Unicode patterns (Chinese, Japanese, etc.)
+ * Validate if a field's current value is valid
+ * Returns true if valid, false if needs fixing
  */
-function inferFieldIntent(field: FieldSchema): string {
-  // Priority 1: Explicit aiIntent
-  if (field.aiIntent) {
-    return field.aiIntent
+function validateFieldValue(field: FieldSchema, value: string): boolean {
+  // Empty values are invalid (need filling)
+  if (!value) {
+    return false
   }
 
-  // Priority 2: Type attribute
-  if (field.type === 'email') return 'email'
-  if (field.type === 'tel') return 'phone'
-  if (field.type === 'url') return 'url'
-  if (field.type === 'date') return 'date'
-  if (field.type === 'time') return 'time'
-  if (field.type === 'number') return 'number'
-  if (field.type === 'password') return 'password'
-
-  // Priority 3: Pattern matching on combined clues
+  // Build clues for intent detection
   const clues = [
     field.name,
     field.id,
     field.label,
     field.placeholder,
     field.ariaLabel,
+    field.aiIntent,
   ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
+
+  // CVV validation: must be 3 or 4 digits
+  if (/cvv|cvc|security.*code/.test(clues) || field.name === 'cvv') {
+    return /^\d{3,4}$/.test(value)
+  }
+
+  // Credit card validation: must be 13-19 digits (with optional spaces)
+  if (/card.*number|credit.*card/.test(clues)) {
+    const digitsOnly = value.replace(/\s/g, '')
+    return /^\d{13,19}$/.test(digitsOnly)
+  }
+
+  // Expiry validation: must be MM/YY format
+  if (/expir|expiry|exp.*date/.test(clues)) {
+    return /^\d{2}\/\d{2}$/.test(value)
+  }
+
+  // Email validation: basic check for @
+  if (field.type === 'email' || /email|e-mail/.test(clues)) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+  }
+
+  // Phone validation: at least 10 digits
+  if (field.type === 'tel' || /phone|tel|mobile/.test(clues)) {
+    const digitsOnly = value.replace(/\D/g, '')
+    return digitsOnly.length >= 10
+  }
+
+  // Number fields: check if it's a valid number within range
+  if (field.type === 'number') {
+    const num = parseFloat(value)
+    if (isNaN(num)) return false
+    if (field.min && num < parseFloat(field.min)) return false
+    if (field.max && num > parseFloat(field.max)) return false
+    return true
+  }
+
+  // Date validation
+  if (field.type === 'date') {
+    const date = new Date(value)
+    return !isNaN(date.getTime())
+  }
+
+  // For required fields, just check it's not empty
+  if (field.required) {
+    return value.trim().length > 0
+  }
+
+  // Default: consider it valid if it has any content
+  return true
+}
+
+/**
+ * Infer field intent from all available clues
+ * Supports English and Unicode patterns (Chinese, Japanese, etc.)
+ */
+function inferFieldIntent(field: FieldSchema): string {
+  // Build clues string first (needed for pattern matching)
+  // Note: aiIntent is included in clues for pattern matching, not used as direct return value
+  // because it often contains descriptive text rather than known intent keys
+  const clues = [
+    field.name,
+    field.id,
+    field.label,
+    field.placeholder,
+    field.ariaLabel,
+    field.aiIntent, // Include as additional hint for pattern matching
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  // Priority 1: Specific semantic types (check before generic types)
+  // Email type is specific
+  if (field.type === 'email') return 'email'
+  if (field.type === 'tel') return 'phone'
+  if (field.type === 'url') return 'url'
+  if (field.type === 'date') return 'date'
+  if (field.type === 'time') return 'time'
+  if (field.type === 'password') return 'password'
+
+  // Priority 2: Payment patterns (check before generic number type)
+  // These need specific generation logic
+  if (/card.*number|credit.*card|número.*tarjeta|numéro.*carte|カード番号/.test(clues)) {
+    return 'creditCard'
+  }
+  if (/cvv|cvc|security.*code|código.*seguridad/.test(clues)) {
+    return 'cvv'
+  }
+  if (/expir|expiry|exp.*date|vencimiento|有効期限/.test(clues)) {
+    return 'cardExpiry'
+  }
+
+  // Priority 3: Generic number type (after specific patterns)
+  if (field.type === 'number') return 'number'
+
+  // Priority 4: Other pattern matching on clues
 
   // Name patterns (English + Unicode)
   if (/first.*name|fname|given.*name|名|prénom|nombre|nome/.test(clues)) {
@@ -157,16 +246,7 @@ function inferFieldIntent(field: FieldSchema): string {
     return 'country'
   }
 
-  // Payment patterns
-  if (/card.*number|credit.*card|número.*tarjeta|numéro.*carte|カード番号/.test(clues)) {
-    return 'creditCard'
-  }
-  if (/cvv|cvc|security.*code|código.*seguridad/.test(clues)) {
-    return 'cvv'
-  }
-  if (/expir|expiry|exp.*date|vencimiento|有効期限/.test(clues)) {
-    return 'cardExpiry'
-  }
+  // Payment patterns already checked earlier (Priority 2)
 
   // Date patterns
   if (/birth.*date|date.*birth|birthday|fecha.*nacimiento|生年月日/.test(clues)) {
@@ -205,9 +285,72 @@ function inferFieldIntent(field: FieldSchema): string {
 /**
  * Generate appropriate value based on inferred intent
  */
-function generateValue(intent: string, field: FieldSchema): string {
+function generateValue(intent: string, field: FieldSchema, mode: 'fill-empty' | 'complete' | 'single-field', currentValue?: string): string {
+  // Handle checkboxes - return 'on' to check them
+  if (field.type === 'checkbox') {
+    // For required checkboxes (like terms), always check
+    if (field.required) {
+      return 'on'
+    }
+
+    // For optional checkboxes, check based on intent/label
+    const clues = [field.name, field.id, field.label, field.aiIntent]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+
+    // Likely should be checked: terms, agree, consent, etc.
+    if (/terms|agree|consent|accept|policy|confirm/i.test(clues)) {
+      return 'on'
+    }
+
+    // Likely optional: newsletter, marketing, updates
+    if (/newsletter|marketing|promo|email.*update|notification/i.test(clues)) {
+      // In single-field mode: randomize to create variety (like faker generates different names)
+      if (mode === 'single-field') {
+        return faker.datatype.boolean() ? 'on' : ''
+      }
+      // In fill-empty/complete mode, default to unchecked (user can opt-in explicitly)
+      return ''
+    }
+
+    // Default for other optional checkboxes in single-field mode: randomize
+    if (mode === 'single-field') {
+      return faker.datatype.boolean() ? 'on' : ''
+    }
+
+    // Default: check optional checkboxes
+    return 'on'
+  }
+
+  // Handle radio buttons - pick first option if available, or a default value
+  if (field.type === 'radio') {
+    // Radio buttons should have been filtered to one per group
+    // For now, return a sensible default (this needs enhancement)
+    if (field.id === 'deliverySpeed' || /delivery.*speed/i.test(field.label || '')) {
+      const options = ['standard', 'express', 'overnight']
+      // In single-field mode with a current value, cycle to the next option
+      if (mode === 'single-field' && currentValue) {
+        const currentIndex = options.indexOf(currentValue)
+        if (currentIndex !== -1) {
+          return options[(currentIndex + 1) % options.length]
+        }
+      }
+      return faker.helpers.arrayElement(options)
+    }
+    // Generic radio: return 'on' to select it
+    return 'on'
+  }
+
   // Handle select fields with options
   if (field.type === 'select' && field.options && field.options.length > 0) {
+    // In single-field mode with a current value, cycle to the next option
+    if (mode === 'single-field' && currentValue) {
+      const currentIndex = field.options.indexOf(currentValue)
+      if (currentIndex !== -1 && field.options.length > 1) {
+        return field.options[(currentIndex + 1) % field.options.length]
+      }
+    }
     return faker.helpers.arrayElement(field.options)
   }
 
@@ -307,20 +450,47 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
           const suggestions: FieldSuggestion[] = []
 
           for (const field of fields) {
-            // Skip buttons
-            if (field.type === 'button' || field.type === 'submit') {
+            // Skip buttons (submit, reset, etc.)
+            if (field.type === 'button' || field.type === 'submit' || field.type === 'reset') {
               continue
             }
 
-            const currentValue = currentValues[field.id] || field.currentValue || ''
+            // IMPORTANT: Only use currentValues (live state), NOT field.currentValue (stale snapshot)
+            const currentValue = currentValues[field.id] || ''
 
+            console.log('[API] Processing field:', {
+              id: field.id,
+              name: field.name,
+              type: field.type,
+              label: field.label,
+              currentValueFromProps: currentValues[field.id],
+              finalCurrentValue: currentValue,
+              willSkip: mode === 'fill-empty' && currentValue
+            })
+
+            // Mode: single-field - always process (used when user clicks ✨ on a specific field)
+            // This allows re-evaluation of checkboxes/radios even if already checked
+            if (mode === 'single-field') {
+              console.log('[API] Single-field mode: always processing:', field.id)
+              // Don't skip, process this field regardless of current value
+            }
             // Mode: fill-empty - only fill empty fields
-            if (mode === 'fill-empty' && currentValue) {
+            // For checkboxes, empty means unchecked (value === '')
+            // For radio, empty means no selection (value === '')
+            else if (mode === 'fill-empty' && currentValue) {
+              console.log('[API] Skipping field (already has value):', field.id)
               continue
             }
-
             // Mode: complete - validate and fix existing values, fill empty
-            // For now, we'll implement simple fill. Future: add validation and fixing logic
+            else if (mode === 'complete' && currentValue) {
+              const isValid = validateFieldValue(field, currentValue)
+              if (isValid) {
+                console.log('[API] Skipping field (value is valid):', field.id, currentValue)
+                continue
+              } else {
+                console.log('[API] Field has invalid value, will fix:', field.id, currentValue)
+              }
+            }
 
             let value: string
             let reasoning: string
@@ -334,9 +504,25 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
             } else {
               // Fall back to faker pattern matching
               const intent = inferFieldIntent(field)
-              value = generateValue(intent, field)
+              value = generateValue(intent, field, mode, currentValue)
               reasoning = `Inferred as "${intent}" from field clues (no form context)`
+
+              // Detailed logging for debugging
+              console.log('[API] Field inference:', {
+                id: field.id,
+                name: field.name,
+                type: field.type,
+                label: field.label,
+                aiIntent: field.aiIntent,
+                inferredIntent: intent,
+                currentValue,
+                generatedValue: value,
+                valueType: typeof value,
+                mode
+              })
             }
+
+            console.log('[API] Generated suggestion:', { fieldId: field.id, value, reasoning, valueType: typeof value })
 
             suggestions.push({
               fieldId: field.id,

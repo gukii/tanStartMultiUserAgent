@@ -60,6 +60,8 @@ export interface FieldSchema {
   min?: string
   /** Max value for number/date inputs */
   max?: string
+  /** DOM position index stamped as data-collab-field-index – used for reliable lookup when name/id are absent */
+  elementIndex: number
 }
 
 // ---------------------------------------------------------------------------

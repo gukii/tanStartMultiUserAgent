@@ -43,6 +43,9 @@ function extractSchema(el: HTMLElement, index: number): FieldSchema {
 
   const aiIntentRaw = el.getAttribute('data-ai-intent')
 
+  // Stamp a stable index on the element for reliable lookup when name/id are absent
+  el.setAttribute('data-collab-field-index', String(index))
+
   const baseSchema: FieldSchema = {
     id,
     name,
@@ -51,6 +54,7 @@ function extractSchema(el: HTMLElement, index: number): FieldSchema {
     label: resolveLabel(el),
     ariaLabel: el.getAttribute('aria-label') ?? '',
     aiIntent: aiIntentRaw ?? undefined,
+    elementIndex: index,
   }
 
   // Only extract additional fields if AI agent is enabled (modular feature)
@@ -100,8 +104,13 @@ export function useMultiplayerMap(
   containerRef: RefObject<HTMLElement | null>,
   onSchemaChange?: (schema: FieldSchema[]) => void,
 ): FieldSchema[] {
+  console.log('[useMultiplayerMap] Hook called')
+
   const [pageSchema, setPageSchema] = useState<FieldSchema[]>([])
+  const [containerReady, setContainerReady] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const observerRef = useRef<MutationObserver | null>(null)
+
   // Keep callback stable without triggering re-subscription
   const onSchemaChangeRef = useRef(onSchemaChange)
   onSchemaChangeRef.current = onSchemaChange
@@ -132,11 +141,44 @@ export function useMultiplayerMap(
 
     setPageSchema(schema)
     onSchemaChangeRef.current?.(schema)
-  }, [containerRef])
+  }, [])
 
+  // Poll for container to become available
   useEffect(() => {
+    if (containerRef.current) {
+      console.log('[useMultiplayerMap] Container already available')
+      setContainerReady(true)
+      return
+    }
+
+    console.log('[useMultiplayerMap] Container not ready, polling...')
+    const pollInterval = setInterval(() => {
+      if (containerRef.current) {
+        console.log('[useMultiplayerMap] Container now available')
+        setContainerReady(true)
+        clearInterval(pollInterval)
+      }
+    }, 50)
+
+    return () => {
+      clearInterval(pollInterval)
+    }
+  }, [])
+
+  // Set up observer once container is ready
+  useEffect(() => {
+    if (!containerReady) {
+      console.log('[useMultiplayerMap] Waiting for container...')
+      return
+    }
+
     const container = containerRef.current
-    if (!container) return
+    if (!container) {
+      console.log('[useMultiplayerMap] Container became unavailable')
+      return
+    }
+
+    console.log('[useMultiplayerMap] Setting up observer on:', container.tagName)
 
     // Initial pass
     scan()
@@ -161,11 +203,14 @@ export function useMultiplayerMap(
       ],
     })
 
+    observerRef.current = observer
+
     return () => {
+      console.log('[useMultiplayerMap] Cleanup: disconnecting observer')
       observer.disconnect()
       if (debounceRef.current !== null) clearTimeout(debounceRef.current)
     }
-  }, [containerRef, scan])
+  }, [containerReady, scan])
 
   return pageSchema
 }

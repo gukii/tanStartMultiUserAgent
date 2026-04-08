@@ -19,17 +19,24 @@ interface FloatingCursorChatProps {
   position?: FloatingChatPosition
   /** Callback when settings button is clicked */
   onSettingsClick: () => void
+  /** Whether floating AI help mode is enabled */
+  aiHelpFloatingEnabled?: boolean
 }
 
 export function FloatingCursorChat({
   position = 'bottom-right',
   onSettingsClick,
+  aiHelpFloatingEnabled = false,
 }: FloatingCursorChatProps) {
   const { cursorMessage, setCursorMessage, touchCursorMode, setTouchCursorMode, submitMode, connected } = useCollaboration()
   const [localMessage, setLocalMessage] = useState(cursorMessage)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
+  const [aiHelpSelectMode, setAIHelpSelectMode] = useState(false)
+  const [showHint, setShowHint] = useState(false)
+  const [fillAllStatus, setFillAllStatus] = useState<string>('')
   const inputRef = useRef<HTMLInputElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     setLocalMessage(cursorMessage)
@@ -88,6 +95,147 @@ export function FloatingCursorChat({
     }
   }
 
+  // Listen for fill-all completion status
+  useEffect(() => {
+    function handleFillAllComplete(e: Event) {
+      const customEvent = e as CustomEvent<{ count: number }>
+      const count = customEvent.detail?.count || 0
+      const message = count > 0 ? `✓ ${count} field${count > 1 ? 's' : ''} filled` : 'No empty fields'
+      setFillAllStatus(message)
+      setTimeout(() => setFillAllStatus(''), 3000) // Clear after 3s
+    }
+
+    window.addEventListener('ai-help-fill-all-complete', handleFillAllComplete as EventListener)
+
+    return () => {
+      window.removeEventListener('ai-help-fill-all-complete', handleFillAllComplete as EventListener)
+    }
+  }, [])
+
+  // AI Help button handlers
+  function handleAIHelpStart(e: React.MouseEvent | React.TouchEvent) {
+    // Start long-press timer (800ms = long press triggers "fill all")
+    longPressTimerRef.current = setTimeout(() => {
+      // Long press: trigger "fill all empty fields"
+      console.log('[FloatingChat] Long press detected - fill all fields')
+      setFillAllStatus('Filling all fields...')
+      const event = new CustomEvent('ai-help-fill-all')
+      window.dispatchEvent(event)
+      setAIHelpSelectMode(false)
+      longPressTimerRef.current = null
+    }, 800)
+  }
+
+  function handleAIHelpEnd() {
+    if (longPressTimerRef.current) {
+      // Short press: toggle field selection mode
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+      const newMode = !aiHelpSelectMode
+      setAIHelpSelectMode(newMode)
+
+      // Show hint when entering select mode
+      if (newMode) {
+        setShowHint(true)
+        setTimeout(() => setShowHint(false), 2000)
+      }
+
+      console.log('[FloatingChat] Short press - toggle select mode')
+    }
+  }
+
+  function handleAIHelpCancel() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  // Handle AI help select mode - listen for field clicks
+  useEffect(() => {
+    if (!aiHelpSelectMode) {
+      console.log('[FloatingChat] Select mode disabled, removing listener')
+      return
+    }
+
+    console.log('[FloatingChat] Select mode enabled, adding click listener')
+
+    function handleFieldClick(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      console.log('[FloatingChat] Click detected on:', target.tagName, target)
+
+      // Ignore clicks on the floating chat controls themselves
+      if (target.closest('[data-floating-chat]')) {
+        console.log('[FloatingChat] Click on floating chat controls, ignoring')
+        return
+      }
+
+      // Prevent default early for checkboxes/radios to stop them from toggling
+      const immediateField = target.closest('input, textarea, select') as HTMLInputElement | null
+      if (immediateField && (immediateField.type === 'checkbox' || immediateField.type === 'radio')) {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log('[FloatingChat] Prevented default for checkbox/radio')
+      }
+
+      // Check if clicked element is a form field
+      let field = target.closest('input, textarea, select') as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+
+      // Special handling for select - if clicked on option, get parent select
+      if (!field && target.tagName === 'OPTION') {
+        const option = target as HTMLOptionElement
+        field = option.closest('select') as HTMLSelectElement | null
+      }
+
+      // If clicked inside a label (e.g., span inside label), find the label first
+      if (!field) {
+        const label = target.closest('label') as HTMLLabelElement | null
+        if (label) {
+          console.log('[FloatingChat] Click inside label:', label)
+          if (label.htmlFor) {
+            field = document.getElementById(label.htmlFor) as HTMLInputElement | null
+          } else {
+            // Label might wrap the input
+            field = label.querySelector('input, textarea, select') as HTMLInputElement | null
+          }
+        }
+      }
+
+      console.log('[FloatingChat] Field found:', field)
+
+      if (field) {
+        // Prevent default action for this field
+        e.preventDefault()
+        e.stopPropagation()
+
+        const fieldName = field.name || field.id
+        const elementIndex = field.getAttribute('data-collab-field-index')
+        console.log('[FloatingChat] Field selected:', fieldName, 'index:', elementIndex)
+
+        // Dispatch event to request AI suggestion for this field
+        const event = new CustomEvent('ai-help-field-selected', {
+          detail: { fieldName, elementIndex: elementIndex !== null ? parseInt(elementIndex) : undefined }
+        })
+        console.log('[FloatingChat] Dispatching event:', event.type, event.detail)
+        window.dispatchEvent(event)
+        console.log('[FloatingChat] Event dispatched successfully')
+
+        setAIHelpSelectMode(false)
+        setShowHint(false)
+      } else {
+        console.log('[FloatingChat] No field found, click ignored')
+      }
+    }
+
+    // Add click listener in capture phase to intercept before other handlers
+    document.addEventListener('click', handleFieldClick, true)
+
+    return () => {
+      console.log('[FloatingChat] Removing click listener')
+      document.removeEventListener('click', handleFieldClick, true)
+    }
+  }, [aiHelpSelectMode])
+
   // Determine position classes based on corner (responsive spacing)
   const positionClasses = {
     'top-left': 'top-3 left-3 sm:top-4 sm:left-4',
@@ -96,14 +244,60 @@ export function FloatingCursorChat({
     'bottom-right': 'bottom-3 right-3 sm:bottom-4 sm:right-4',
   }[position]
 
+  // Determine hint position (opposite of floating chat)
+  const hintPositionClasses = {
+    'top-left': 'top-16 left-3 sm:top-20 sm:left-4',
+    'top-right': 'top-16 right-3 sm:top-20 sm:right-4',
+    'bottom-left': 'bottom-16 left-3 sm:bottom-20 sm:left-4',
+    'bottom-right': 'bottom-16 right-3 sm:bottom-20 sm:right-4',
+  }[position]
+
   return (
-    <div
-      className={`fixed ${positionClasses} z-40 flex items-center gap-2 rounded-lg border p-2 shadow-lg backdrop-blur-sm transition-all ${
-        connected
-          ? 'border-violet-400 bg-violet-600'
-          : 'border-gray-500 bg-gray-600'
-      }`}
-    >
+    <>
+      {/* Field selection mode hint (positioned opposite to floating chat, fades out after 2s) */}
+      {aiHelpSelectMode && (
+        <div
+          className={`fixed ${hintPositionClasses} z-30 bg-yellow-100 border border-yellow-400 rounded-lg shadow-lg p-3 max-w-xs pointer-events-none transition-opacity duration-500 ${
+            showHint ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <p className="text-xs sm:text-sm font-medium text-gray-900 flex items-center gap-2">
+            <span className="text-base">✨</span>
+            Click a field to get AI suggestion
+          </p>
+        </div>
+      )}
+
+      {/* Fill-all status message (shows after long-press) */}
+      {fillAllStatus && (
+        <div
+          className={`fixed ${hintPositionClasses} z-30 rounded-lg shadow-lg p-3 max-w-xs pointer-events-none transition-opacity duration-500 ${
+            fillAllStatus.includes('✓')
+              ? 'bg-green-100 border border-green-400'
+              : fillAllStatus.includes('Error') || fillAllStatus === 'No empty fields'
+              ? 'bg-yellow-100 border border-yellow-400'
+              : 'bg-blue-100 border border-blue-400'
+          }`}
+        >
+          <p className="text-xs sm:text-sm font-medium text-gray-900">
+            {fillAllStatus}
+          </p>
+        </div>
+      )}
+
+      {/* Subtle overlay to indicate selection mode is active - must allow clicks through */}
+      {aiHelpSelectMode && (
+        <div className="fixed inset-0 z-25 cursor-crosshair pointer-events-none" />
+      )}
+
+      <div
+        data-floating-chat
+        className={`fixed ${positionClasses} z-40 flex items-center gap-2 rounded-lg border p-2 shadow-lg backdrop-blur-sm transition-all ${
+          connected
+            ? 'border-violet-400 bg-violet-600'
+            : 'border-gray-500 bg-gray-600'
+        }`}
+      >
       {/* Touch cursor toggle with crosshair icon - only show on touch devices */}
       {isTouchDevice && (
         <button
@@ -147,6 +341,27 @@ export function FloatingCursorChat({
         title={connected ? "Type a message to show next to your cursor. Shortcut: Cmd/Ctrl + K. Press Enter to send, Esc to cancel." : "Offline - reconnecting..."}
       />
 
+      {/* AI Help sparkle button (only show if floating mode enabled) */}
+      {import.meta.env.VITE_ENABLE_AI_AGENT === 'true' && aiHelpFloatingEnabled && (
+        <button
+          onMouseDown={handleAIHelpStart}
+          onMouseUp={handleAIHelpEnd}
+          onMouseLeave={handleAIHelpCancel}
+          onTouchStart={handleAIHelpStart}
+          onTouchEnd={handleAIHelpEnd}
+          onTouchCancel={handleAIHelpCancel}
+          className={`rounded p-1.5 transition select-none ${
+            aiHelpSelectMode
+              ? 'bg-yellow-400 text-gray-900 ring-2 ring-yellow-300'
+              : 'text-violet-100 hover:bg-violet-500 hover:text-white'
+          }`}
+          title={aiHelpSelectMode ? "Click a field to get AI suggestion" : "Click: select field | Long-press: fill all"}
+          aria-label="AI field help"
+        >
+          <span className="text-base leading-none">✨</span>
+        </button>
+      )}
+
       {/* Settings gear button */}
       <button
         onClick={onSettingsClick}
@@ -160,5 +375,6 @@ export function FloatingCursorChat({
         </svg>
       </button>
     </div>
+    </>
   )
 }

@@ -36,6 +36,10 @@ import { faker } from '@faker-js/faker'
 import { useMultiplayerMap } from '../hooks/useMultiplayerMap'
 import { GhostCursor } from './GhostCursor'
 import { AISuggestionBubble } from './AISuggestionBubble'
+import { FloatingCursorChat } from './FloatingCursorChat'
+import { UserSettingsPanel } from './UserSettingsPanel'
+import type { AIHelpMode } from './UserSettingsPanel'
+import type { FloatingChatPosition } from './FloatingCursorChat'
 
 // Lazy load AI Agent buttons (modular feature)
 const AIAgentButtons = lazy(() => import('./AIAgentButtons').then(m => ({ default: m.AIAgentButtons })))
@@ -367,6 +371,31 @@ export function CollaborationHarness({
   // Track reconnection attempts for exponential backoff
   const reconnectAttempts = useRef(0)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Floating chat + settings state – read from localStorage so any harness instance picks it up
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [floatingChatPosition, setFloatingChatPositionState] = useState<FloatingChatPosition>('bottom-right')
+  const [aiHelpModes, setAIHelpModesState] = useState<AIHelpMode[]>([])
+
+  // Load persisted UI prefs on mount (client only)
+  useEffect(() => {
+    const savedPos = localStorage.getItem('floatingChatPosition') as FloatingChatPosition | null
+    if (savedPos) setFloatingChatPositionState(savedPos)
+    const savedModes = localStorage.getItem('aiHelpModes')
+    if (savedModes) {
+      try { setAIHelpModesState(JSON.parse(savedModes) as AIHelpMode[]) } catch {}
+    }
+  }, [])
+
+  function setFloatingChatPosition(pos: FloatingChatPosition) {
+    setFloatingChatPositionState(pos)
+    localStorage.setItem('floatingChatPosition', pos)
+  }
+
+  function setAIHelpModes(modes: AIHelpMode[]) {
+    setAIHelpModesState(modes)
+    localStorage.setItem('aiHelpModes', JSON.stringify(modes))
+  }
 
   const [connected, setConnected] = useState(false)
   const [remoteCursors, setRemoteCursors] = useState<Record<string, CursorState>>({})
@@ -2553,8 +2582,33 @@ export function CollaborationHarness({
               Object.entries(remoteFieldValues).map(([k, v]) => [k, v.value])
             )}
             disabled={disabled}
+            containerRef={containerRef}
           />
         </Suspense>
+      )}
+
+      {/* Floating controls + settings panel – rendered for every harness instance */}
+      {!disabled && (
+        <>
+          <FloatingCursorChat
+            position={floatingChatPosition}
+            onSettingsClick={() => setSettingsOpen(true)}
+            aiHelpFloatingEnabled={aiHelpModes.includes('floating')}
+          />
+          <UserSettingsPanel
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            userName={name}
+            userColor={color}
+            floatingChatPosition={floatingChatPosition}
+            submitMode={currentSubmitMode}
+            aiHelpModes={aiHelpModes}
+            updateUser={updateUser}
+            setFloatingChatPosition={setFloatingChatPosition}
+            setSubmitMode={(m) => setCurrentSubmitMode(m)}
+            setAIHelpModes={setAIHelpModes}
+          />
+        </>
       )}
 
       {/* Ghost cursors for remote peers */}

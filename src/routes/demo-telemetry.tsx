@@ -9,25 +9,22 @@
  *   • Query data: `sqlite3 data/telemetry.db`
  */
 
-import { createFileRoute } from '@tanstack/react-router'
-import { useState, useId, useEffect, useRef, useCallback } from 'react'
-import { CollaborationHarnessWithTelemetry } from '../components/CollaborationHarnessWithTelemetry'
-import { useCollaboration } from '../components/CollaborationHarness'
-import { SubmitControl } from '../components/SubmitControl'
-import { UserSettingsPanel } from '../components/UserSettingsPanel'
-import { FloatingCursorChat, type FloatingChatPosition } from '../components/FloatingCursorChat'
-import { getNormalBehavior } from '../lib/normalBehavior.server'
-import { submitCheckout } from '../lib/submitCheckout.server'
-import { faker } from '@faker-js/faker'
+import { createFileRoute } from "@tanstack/react-router";
+import { useState, useId, useRef, useCallback } from "react";
+import { CollaborationHarnessWithTelemetry } from "../components/CollaborationHarnessWithTelemetry";
+import { SubmitControl } from "../components/SubmitControl";
+import { getNormalBehavior } from "../lib/normalBehavior.server";
+import { submitCheckout } from "../lib/submitCheckout.server";
+import { faker } from "@faker-js/faker";
 
 interface ValidationError {
-  field: string
-  message: string
+  field: string;
+  message: string;
 }
 
-export const Route = createFileRoute('/demo-telemetry')({
+export const Route = createFileRoute("/demo-telemetry")({
   component: DemoTelemetryPage,
-})
+});
 
 // ---------------------------------------------------------------------------
 // Simple checkout form (plain HTML – no special collaboration code needed)
@@ -40,63 +37,76 @@ function CheckoutForm({
   submittedBy,
   setSubmittedBy,
 }: {
-  submitted: boolean
-  setSubmitted: (submitted: boolean) => void
-  onReset: () => void
-  submittedBy: string | null
-  setSubmittedBy: (userId: string | null) => void
+  submitted: boolean;
+  setSubmitted: (submitted: boolean) => void;
+  onReset: () => void;
+  submittedBy: string | null;
+  setSubmittedBy: (userId: string | null) => void;
 }) {
-  const [mounted, setMounted] = useState(false)
-  const [formKey, setFormKey] = useState(0)
-  const [submitting, setSubmitting] = useState(false)
-  const { unmarkReady, clearForm, sendFormSubmit, userId, users, broadcastServerErrors } = useCollaboration()
-  const firstId = useId()
-  const lastId = useId()
-  const emailId = useId()
-  const cardId = useId()
-  const expiryId = useId()
-  const cvvId = useId()
-  const addressId = useId()
-  const cityId = useId()
-  const countryId = useId()
-  const notesId = useId()
+  const [mounted, setMounted] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const {
+    unmarkReady,
+    clearForm,
+    sendFormSubmit,
+    userId,
+    users,
+    broadcastServerErrors,
+  } = useCollaboration();
+  const firstId = useId();
+  const lastId = useId();
+  const emailId = useId();
+  const cardId = useId();
+  const expiryId = useId();
+  const cvvId = useId();
+  const addressId = useId();
+  const cityId = useId();
+  const countryId = useId();
+  const notesId = useId();
 
   // Client-only rendering to avoid hydration issues with browser extensions
   useEffect(() => {
-    setMounted(true)
-  }, [])
+    setMounted(true);
+  }, []);
 
   function resetForm() {
     // First, show the form (switch from success message to form)
-    onReset()
-    setSubmittedBy(null)
-    unmarkReady()
+    onReset();
+    setSubmittedBy(null);
+    unmarkReady();
 
     // Then, after form is mounted, clear all fields
     setTimeout(() => {
-      clearForm()
-    }, 50)
+      clearForm();
+    }, 50);
   }
 
   if (!mounted) {
-    return <div className="h-96" /> // Placeholder during SSR
+    return <div className="h-96" />; // Placeholder during SSR
   }
 
   if (submitted) {
-    const submittedByUser = submittedBy ? users[submittedBy] : null
-    const submitterName = submittedByUser?.name || (submittedBy === userId ? 'You' : 'Someone')
+    const submittedByUser = submittedBy ? users[submittedBy] : null;
+    const submitterName =
+      submittedByUser?.name || (submittedBy === userId ? "You" : "Someone");
 
     return (
       <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center sm:p-8">
         <div className="mb-2 text-4xl">✅</div>
-        <h2 className="text-lg font-semibold text-green-800 sm:text-xl">Order placed!</h2>
+        <h2 className="text-lg font-semibold text-green-800 sm:text-xl">
+          Order placed!
+        </h2>
         {submittedBy && (
           <p className="mt-2 text-sm text-green-700">
-            Submitted by: {submittedBy === userId ? 'You' : submitterName}
+            Submitted by: {submittedBy === userId ? "You" : submitterName}
           </p>
         )}
         <p className="mt-2 text-sm text-green-700">
-          📊 Telemetry data captured. Check: <code className="rounded bg-green-100 px-1 py-0.5 text-xs">node scripts/verify-telemetry-db.js</code>
+          📊 Telemetry data captured. Check:{" "}
+          <code className="rounded bg-green-100 px-1 py-0.5 text-xs">
+            node scripts/verify-telemetry-db.js
+          </code>
         </p>
         <button
           className="mt-3 text-sm text-green-700 underline sm:mt-4"
@@ -105,7 +115,7 @@ function CheckoutForm({
           Reset form
         </button>
       </div>
-    )
+    );
   }
 
   return (
@@ -121,55 +131,72 @@ function CheckoutForm({
         // So if we reach here, the form is guaranteed to be valid (client-side).
 
         // Prevent default form submission (we handle it with server function)
-        e.preventDefault()
+        e.preventDefault();
 
-        const formData = new FormData(e.currentTarget)
-        setSubmitting(true)
+        const formData = new FormData(e.currentTarget);
+        setSubmitting(true);
 
         try {
           // Convert FormData to typed object for server function
           const data = {
-            firstName: formData.get('firstName') as string,
-            lastName: formData.get('lastName') as string,
-            email: formData.get('email') as string,
-            cardNumber: formData.get('cardNumber') as string,
-            expiry: formData.get('expiry') as string,
-            cvv: formData.get('cvv') as string,
-            address: formData.get('address') as string,
-            city: formData.get('city') as string,
-            country: formData.get('country') as string,
-            notes: formData.get('notes') as string || undefined,
-          }
+            firstName: formData.get("firstName") as string,
+            lastName: formData.get("lastName") as string,
+            email: formData.get("email") as string,
+            cardNumber: formData.get("cardNumber") as string,
+            expiry: formData.get("expiry") as string,
+            cvv: formData.get("cvv") as string,
+            address: formData.get("address") as string,
+            city: formData.get("city") as string,
+            country: formData.get("country") as string,
+            notes: (formData.get("notes") as string) || undefined,
+            // New test fields (optional for testing harness robustness)
+            newsletter: formData.get("newsletter") ? "on" : "off",
+            terms: formData.get("terms") ? "on" : "off",
+            deliverySpeed: formData.get("deliverySpeed") as string,
+            promoCode: (formData.get("promoCode") as string) || undefined,
+            quantity: (formData.get("quantity") as string) || undefined,
+            deliveryDate: (formData.get("deliveryDate") as string) || undefined,
+            phone: (formData.get("phone") as string) || undefined,
+          };
 
           // Call server function directly (type-safe, automatic serialization)
-          const result = await submitCheckout({ data })
+          const result = await submitCheckout({ data });
 
-          console.log('[CheckoutForm] Server response:', result)
+          console.log("[CheckoutForm] Server response:", result);
 
           if (result.success) {
             // Success - clear any previous errors and proceed with submission
-            broadcastServerErrors([]) // Clear errors for all peers
-            sendFormSubmit()
-            setSubmitted(true)
-            setSubmittedBy(userId)
-            console.log('[CheckoutForm] Order placed successfully:', result.orderId)
+            broadcastServerErrors([]); // Clear errors for all peers
+            sendFormSubmit();
+            setSubmitted(true);
+            setSubmittedBy(userId);
+            console.log(
+              "[CheckoutForm] Order placed successfully:",
+              result.orderId,
+            );
           } else {
             // Server validation failed
-            console.log('[CheckoutForm] Server validation failed, broadcasting errors:', result.errors)
-            const errors = result.errors || []
+            console.log(
+              "[CheckoutForm] Server validation failed, broadcasting errors:",
+              result.errors,
+            );
+            const errors = result.errors || [];
             // Broadcast errors to all peers so everyone sees the validation feedback
-            broadcastServerErrors(errors)
-            console.log('[CheckoutForm] Errors broadcast to peers via harness')
+            broadcastServerErrors(errors);
+            console.log("[CheckoutForm] Errors broadcast to peers via harness");
           }
         } catch (error) {
-          console.error('[CheckoutForm] Submission error:', error)
+          console.error("[CheckoutForm] Submission error:", error);
           // Show generic error without targeting specific field
-          broadcastServerErrors([{
-            field: '_form',
-            message: 'Network error. Please check your connection and try again.'
-          }])
+          broadcastServerErrors([
+            {
+              field: "_form",
+              message:
+                "Network error. Please check your connection and try again.",
+            },
+          ]);
         } finally {
-          setSubmitting(false)
+          setSubmitting(false);
         }
       }}
     >
@@ -178,7 +205,10 @@ function CheckoutForm({
           Personal details
         </legend>
         <div>
-          <label htmlFor={firstId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={firstId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             First name <span className="text-red-500">*</span>
           </label>
           <input
@@ -192,7 +222,10 @@ function CheckoutForm({
           />
         </div>
         <div>
-          <label htmlFor={lastId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={lastId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             Last name <span className="text-red-500">*</span>
           </label>
           <input
@@ -206,7 +239,10 @@ function CheckoutForm({
           />
         </div>
         <div className="sm:col-span-2">
-          <label htmlFor={emailId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={emailId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             Email <span className="text-red-500">*</span>
           </label>
           <input
@@ -226,7 +262,10 @@ function CheckoutForm({
           Payment
         </legend>
         <div className="sm:col-span-2">
-          <label htmlFor={cardId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={cardId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             Card number <span className="text-red-500">*</span>
           </label>
           <input
@@ -241,7 +280,10 @@ function CheckoutForm({
           />
         </div>
         <div>
-          <label htmlFor={expiryId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={expiryId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             Expiry <span className="text-red-500">*</span>
           </label>
           <input
@@ -256,13 +298,16 @@ function CheckoutForm({
           />
         </div>
         <div>
-          <label htmlFor={cvvId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={cvvId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             CVV <span className="text-red-500">*</span>
           </label>
           <input
             id={cvvId}
             name="cvv"
-            type="text"
+            type="number"
             placeholder="123"
             pattern="\d{3,4}"
             required
@@ -277,13 +322,16 @@ function CheckoutForm({
           Shipping
         </legend>
         <div className="sm:col-span-2">
-          <label htmlFor={addressId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={addressId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             Street address <span className="text-red-500">*</span>
           </label>
+          {/* Test: Field missing type attribute */}
           <input
             id={addressId}
             name="address"
-            type="text"
             placeholder="123 Main St"
             required
             data-ai-intent="Street address including house number"
@@ -291,21 +339,22 @@ function CheckoutForm({
           />
         </div>
         <div>
-          <label htmlFor={cityId} className="mb-1 block text-sm font-medium text-gray-700">
-            City <span className="text-red-500">*</span>
-          </label>
+          {/* Test: Field missing label element (only aria-label) */}
           <input
             id={cityId}
             name="city"
             type="text"
             placeholder="San Francisco"
             required
-            data-ai-intent="City name"
+            aria-label="City"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
           />
         </div>
         <div>
-          <label htmlFor={countryId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={countryId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             Country <span className="text-red-500">*</span>
           </label>
           <select
@@ -324,7 +373,10 @@ function CheckoutForm({
           </select>
         </div>
         <div className="sm:col-span-2">
-          <label htmlFor={notesId} className="mb-1 block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={notesId}
+            className="mb-1 block text-sm font-medium text-gray-700"
+          >
             Delivery notes <span className="text-gray-400">(optional)</span>
           </label>
           <textarea
@@ -338,9 +390,125 @@ function CheckoutForm({
         </div>
       </fieldset>
 
+      {/* Test robustness: Additional field types */}
+      <fieldset className="grid gap-3 sm:gap-4">
+        <legend className="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-500">
+          Preferences (Testing various input types)
+        </legend>
+
+        <div>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="newsletter"
+              data-ai-intent="Subscribe to newsletter"
+              className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-2 focus:ring-violet-200"
+            />
+            <span className="text-sm text-gray-700">Subscribe to newsletter</span>
+          </label>
+        </div>
+
+        <div>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="terms"
+              required
+              className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-2 focus:ring-violet-200"
+            />
+            <span className="text-sm text-gray-700">
+              I agree to terms <span className="text-red-500">*</span>
+            </span>
+          </label>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-medium text-gray-700">Delivery speed:</p>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="deliverySpeed"
+                value="standard"
+                data-ai-intent="Standard delivery (5-7 days)"
+                className="h-4 w-4 border-gray-300 text-violet-600 focus:ring-2 focus:ring-violet-200"
+              />
+              <span className="text-sm text-gray-700">Standard (5-7 days)</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="deliverySpeed"
+                value="express"
+                data-ai-intent="Express delivery (2-3 days)"
+                className="h-4 w-4 border-gray-300 text-violet-600 focus:ring-2 focus:ring-violet-200"
+              />
+              <span className="text-sm text-gray-700">Express (2-3 days)</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="deliverySpeed"
+                value="overnight"
+                data-ai-intent="Overnight delivery"
+                className="h-4 w-4 border-gray-300 text-violet-600 focus:ring-2 focus:ring-violet-200"
+              />
+              <span className="text-sm text-gray-700">Overnight</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Test: Field with only name, no id, no label */}
+        <div>
+          <input
+            name="promoCode"
+            placeholder="Promo code (if any)"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm"
+          />
+        </div>
+
+        {/* Test: Number input with min/max */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Quantity
+          </label>
+          <input
+            name="quantity"
+            type="number"
+            min="1"
+            max="99"
+            placeholder="1"
+            data-ai-intent="Order quantity"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm"
+          />
+        </div>
+
+        {/* Test: Date input */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Preferred delivery date
+          </label>
+          <input
+            name="deliveryDate"
+            type="date"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm"
+          />
+        </div>
+
+        {/* Test: Tel input with no attributes except name */}
+        <div>
+          <input
+            name="phone"
+            type="tel"
+            placeholder="Phone number"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm"
+          />
+        </div>
+      </fieldset>
+
       <SubmitControl submitText="Place order" />
     </form>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -348,68 +516,72 @@ function CheckoutForm({
 // ---------------------------------------------------------------------------
 
 interface SimulatorPanelProps {
-  partyKitHost?: string
-  roomId: string
+  partyKitHost?: string;
+  roomId: string;
 }
 
 function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
-  const [hints, setHints] = useState<string>('')
-  const [status, setStatus] = useState<string>('')
+  const [hints, setHints] = useState<string>("");
+  const [status, setStatus] = useState<string>("");
 
   async function loadHints() {
     try {
-      const data = await getNormalBehavior({ data: '/demo-telemetry' })
-      setHints(JSON.stringify(data.fields, null, 2))
-      setStatus('Hints loaded ✓')
+      const data = await getNormalBehavior({ data: "/demo-telemetry" });
+      setHints(JSON.stringify(data.fields, null, 2));
+      setStatus("Hints loaded ✓");
     } catch (err) {
-      setStatus(`Error: ${String(err)}`)
+      setStatus(`Error: ${String(err)}`);
     }
   }
 
   function sendDraft(fieldId: string, value: string, reason: string) {
     // Connect as an AI Agent and push a DRAFT_FIELD message
-    const host = partyKitHost ?? window.location.host
-    const wsProto = host.startsWith('localhost') || host.startsWith('127.')
-      ? 'ws'
-      : 'wss'
-    const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(roomId)}?userId=ai-agent&name=AI%20Assistant&color=%238b5cf6`
-    const ws = new WebSocket(url)
+    const host = partyKitHost ?? window.location.host;
+    const wsProto =
+      host.startsWith("localhost") || host.startsWith("127.") ? "ws" : "wss";
+    const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(roomId)}?userId=ai-agent&name=AI%20Assistant&color=%238b5cf6`;
+    const ws = new WebSocket(url);
     ws.onopen = () => {
-      ws.send(JSON.stringify({
-        type: 'DRAFT_FIELD',
-        fieldId,
-        value,
-        source: 'AI Assistant',
-        reason,
-      }))
-      setTimeout(() => ws.close(), 300)
-      setStatus(`Draft sent for "${fieldId}" ✓`)
-    }
-    ws.onerror = () => setStatus('WebSocket error – is server running?')
+      ws.send(
+        JSON.stringify({
+          type: "DRAFT_FIELD",
+          fieldId,
+          value,
+          source: "AI Assistant",
+          reason,
+        }),
+      );
+      setTimeout(() => ws.close(), 300);
+      setStatus(`Draft sent for "${fieldId}" ✓`);
+    };
+    ws.onerror = () => setStatus("WebSocket error – is server running?");
   }
 
   function fillAllFields() {
     // Generate realistic faker data for all fields
     // Generate valid future expiry date
-    const currentDate = new Date()
-    const currentYear = currentDate.getFullYear() % 100 // Last 2 digits
-    const currentMonth = currentDate.getMonth() + 1
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear() % 100; // Last 2 digits
+    const currentMonth = currentDate.getMonth() + 1;
 
     // Generate a date 1-3 years in the future
-    const yearsAhead = faker.number.int({ min: 1, max: 3 })
-    const futureYear = (currentYear + yearsAhead) % 100
-    const expiryMonth = faker.number.int({ min: 1, max: 12 }).toString().padStart(2, '0')
-    const expiryYear = futureYear.toString().padStart(2, '0')
+    const yearsAhead = faker.number.int({ min: 1, max: 3 });
+    const futureYear = (currentYear + yearsAhead) % 100;
+    const expiryMonth = faker.number
+      .int({ min: 1, max: 12 })
+      .toString()
+      .padStart(2, "0");
+    const expiryYear = futureYear.toString().padStart(2, "0");
 
-    const countries = ['US', 'DE', 'GB', 'FR', 'AU']
+    const countries = ["US", "DE", "GB", "FR", "AU"];
 
     // Use test card numbers that are guaranteed to pass Luhn validation
     const validTestCards = [
-      '4242 4242 4242 4242', // Visa
-      '5555 5555 5555 4444', // Mastercard
-      '3782 822463 10005',   // American Express
-      '6011 1111 1111 1117', // Discover
-    ]
+      "4242 4242 4242 4242", // Visa
+      "5555 5555 5555 4444", // Mastercard
+      "3782 822463 10005", // American Express
+      "6011 1111 1111 1117", // Discover
+    ];
 
     const formData = {
       firstName: faker.person.firstName(),
@@ -422,76 +594,117 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
       city: faker.location.city(),
       country: faker.helpers.arrayElement(countries),
       notes: faker.lorem.sentence(),
-    }
+    };
 
     // Connect as AI Agent and send UPDATE_FIELD for each field
-    const host = partyKitHost ?? window.location.host
-    const wsProto = host.startsWith('localhost') || host.startsWith('127.')
-      ? 'ws'
-      : 'wss'
-    const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(roomId)}?userId=ai-agent&name=AI%20Agent&color=%238b5cf6`
-    const ws = new WebSocket(url)
+    const host = partyKitHost ?? window.location.host;
+    const wsProto =
+      host.startsWith("localhost") || host.startsWith("127.") ? "ws" : "wss";
+    const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(roomId)}?userId=ai-agent&name=AI%20Agent&color=%238b5cf6`;
+    const ws = new WebSocket(url);
 
     ws.onopen = () => {
       // Send UPDATE_FIELD for each field
       Object.entries(formData).forEach(([fieldId, value]) => {
-        ws.send(JSON.stringify({
-          type: 'UPDATE_FIELD',
-          fieldId,
-          value,
+        ws.send(
+          JSON.stringify({
+            type: "UPDATE_FIELD",
+            fieldId,
+            value,
+            timestamp: Date.now(),
+          }),
+        );
+      });
+      setTimeout(() => ws.close(), 500);
+      setStatus("✓ All fields filled with AI Agent data");
+    };
+    ws.onerror = () => setStatus("WebSocket error – is server running?");
+  }
+
+  function clearAllFields() {
+    // Connect as AI Agent and send CLEAR_FORM message
+    const host = partyKitHost ?? window.location.host;
+    const wsProto =
+      host.startsWith("localhost") || host.startsWith("127.") ? "ws" : "wss";
+    const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(roomId)}?userId=ai-agent&name=AI%20Agent&color=%238b5cf6`;
+    const ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      ws.send(
+        JSON.stringify({
+          type: "CLEAR_FORM",
           timestamp: Date.now(),
-        }))
-      })
-      setTimeout(() => ws.close(), 500)
-      setStatus('✓ All fields filled with AI Agent data')
-    }
-    ws.onerror = () => setStatus('WebSocket error – is server running?')
+        }),
+      );
+      setTimeout(() => ws.close(), 300);
+      setStatus("✓ All fields cleared");
+    };
+    ws.onerror = () => setStatus("WebSocket error – is server running?");
   }
 
   return (
     <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50 p-4 sm:p-5">
-      <h2 className="mb-2 text-sm font-semibold text-violet-900 sm:mb-3 sm:text-base">🤖 AI Agent simulator</h2>
+      <h2 className="mb-2 text-sm font-semibold text-violet-900 sm:mb-3 sm:text-base">
+        🤖 AI Agent simulator
+      </h2>
       <p className="mb-3 text-xs text-violet-700 sm:mb-4 sm:text-sm">
         Simulate an AI Agent by injecting draft suggestions into the room. The
-        main form will show Accept / Reject bubbles. Telemetry tracks AI suggestion acceptance rates.
+        main form will show Accept / Reject bubbles. Telemetry tracks AI
+        suggestion acceptance rates.
       </p>
 
       <div className="mb-3 flex flex-wrap gap-2">
         <button
           onClick={fillAllFields}
           onTouchEnd={(e) => {
-            e.preventDefault()
-            fillAllFields()
+            e.preventDefault();
+            fillAllFields();
           }}
           className="rounded bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 active:bg-emerald-800 touch-manipulation"
         >
           🤖 Fill All Fields (AI Agent)
         </button>
         <button
-          onClick={() => sendDraft('firstName', 'Alice', 'Common test first name')}
+          onClick={clearAllFields}
           onTouchEnd={(e) => {
-            e.preventDefault()
-            sendDraft('firstName', 'Alice', 'Common test first name')
+            e.preventDefault();
+            clearAllFields();
+          }}
+          className="rounded bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 active:bg-red-800 touch-manipulation"
+        >
+          🗑️ Clear All
+        </button>
+        <button
+          onClick={() =>
+            sendDraft("firstName", "Alice", "Common test first name")
+          }
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            sendDraft("firstName", "Alice", "Common test first name");
           }}
           className="rounded bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700 active:bg-violet-800 touch-manipulation"
         >
           Draft: firstName → "Alice"
         </button>
         <button
-          onClick={() => sendDraft('email', 'alice@example.com', 'Matches the first name')}
+          onClick={() =>
+            sendDraft("email", "alice@example.com", "Matches the first name")
+          }
           onTouchEnd={(e) => {
-            e.preventDefault()
-            sendDraft('email', 'alice@example.com', 'Matches the first name')
+            e.preventDefault();
+            sendDraft("email", "alice@example.com", "Matches the first name");
           }}
           className="rounded bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700 active:bg-violet-800 touch-manipulation"
         >
           Draft: email → "alice@example.com"
         </button>
         <button
-          onClick={() => sendDraft('city', 'San Francisco', 'Most common city in dataset')}
+          onClick={() =>
+            sendDraft("city", "San Francisco", "Most common city in dataset")
+          }
           onTouchEnd={(e) => {
-            e.preventDefault()
-            sendDraft('city', 'San Francisco', 'Most common city in dataset')
+            e.preventDefault();
+            sendDraft("city", "San Francisco", "Most common city in dataset");
           }}
           className="rounded bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700 active:bg-violet-800 touch-manipulation"
         >
@@ -503,8 +716,8 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
         <button
           onClick={loadHints}
           onTouchEnd={(e) => {
-            e.preventDefault()
-            loadHints()
+            e.preventDefault();
+            loadHints();
           }}
           className="rounded border border-violet-400 bg-white px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 active:bg-violet-200 touch-manipulation"
         >
@@ -519,7 +732,7 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
         </pre>
       )}
     </div>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -529,7 +742,9 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
 function TelemetryInfoPanel() {
   return (
     <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50 p-4 sm:p-5">
-      <h2 className="mb-2 text-sm font-semibold text-emerald-900 sm:mb-3 sm:text-base">📊 Telemetry Active</h2>
+      <h2 className="mb-2 text-sm font-semibold text-emerald-900 sm:mb-3 sm:text-base">
+        📊 Telemetry Active
+      </h2>
       <p className="mb-3 text-xs text-emerald-700 sm:text-sm">
         This page captures comprehensive interaction data for analysis.
       </p>
@@ -537,68 +752,50 @@ function TelemetryInfoPanel() {
       <div className="space-y-2 text-xs text-emerald-800">
         <div className="flex items-start gap-2">
           <span className="mt-0.5">✓</span>
-          <span><strong>Events tracked:</strong> Field focus/blur, keystrokes, validation errors, AI drafts</span>
+          <span>
+            <strong>Events tracked:</strong> Field focus/blur, keystrokes,
+            validation errors, AI drafts
+          </span>
         </div>
         <div className="flex items-start gap-2">
           <span className="mt-0.5">✓</span>
-          <span><strong>PII mode:</strong> <code className="rounded bg-emerald-100 px-1 py-0.5">capture</code> (raw values stored for testing)</span>
+          <span>
+            <strong>PII mode:</strong>{" "}
+            <code className="rounded bg-emerald-100 px-1 py-0.5">capture</code>{" "}
+            (raw values stored for testing)
+          </span>
         </div>
         <div className="flex items-start gap-2">
           <span className="mt-0.5">✓</span>
-          <span><strong>Storage:</strong> SQLite database at <code className="rounded bg-emerald-100 px-1 py-0.5">./data/telemetry.db</code></span>
+          <span>
+            <strong>Storage:</strong> SQLite database at{" "}
+            <code className="rounded bg-emerald-100 px-1 py-0.5">
+              ./data/telemetry.db
+            </code>
+          </span>
         </div>
       </div>
 
       <div className="mt-4 rounded-lg bg-white p-3 border border-emerald-200">
-        <div className="mb-2 text-xs font-semibold text-emerald-900">Verify Data Capture</div>
+        <div className="mb-2 text-xs font-semibold text-emerald-900">
+          Verify Data Capture
+        </div>
         <code className="block text-xs text-gray-700 bg-gray-50 p-2 rounded overflow-x-auto">
           node scripts/verify-telemetry-db.js
         </code>
       </div>
 
       <div className="mt-3 rounded-lg bg-white p-3 border border-emerald-200">
-        <div className="mb-2 text-xs font-semibold text-emerald-900">Query Events</div>
+        <div className="mb-2 text-xs font-semibold text-emerald-900">
+          Query Events
+        </div>
         <code className="block text-xs text-gray-700 bg-gray-50 p-2 rounded overflow-x-auto">
-          sqlite3 data/telemetry.db "SELECT event_type, COUNT(*) FROM telemetry_interactions GROUP BY event_type;"
+          sqlite3 data/telemetry.db "SELECT event_type, COUNT(*) FROM
+          telemetry_interactions GROUP BY event_type;"
         </code>
       </div>
     </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Settings panel wrapper that uses the collab context
-// ---------------------------------------------------------------------------
-
-function SettingsPanelWrapper({
-  isOpen,
-  onClose,
-  floatingChatPosition,
-  setFloatingChatPosition,
-  submitMode,
-  setSubmitMode,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  floatingChatPosition: FloatingChatPosition
-  setFloatingChatPosition: (position: FloatingChatPosition) => void
-  submitMode: 'any' | 'consensus'
-  setSubmitMode: (mode: 'any' | 'consensus') => void
-}) {
-  const { userName, userColor, updateUser } = useCollaboration()
-  return (
-    <UserSettingsPanel
-      isOpen={isOpen}
-      onClose={onClose}
-      userName={userName}
-      userColor={userColor}
-      floatingChatPosition={floatingChatPosition}
-      submitMode={submitMode}
-      updateUser={updateUser}
-      setFloatingChatPosition={setFloatingChatPosition}
-      setSubmitMode={setSubmitMode}
-    />
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -606,38 +803,18 @@ function SettingsPanelWrapper({
 // ---------------------------------------------------------------------------
 
 function DemoTelemetryPage() {
-  const partyKitHost = import.meta.env.VITE_PARTYKIT_HOST as string | undefined
-  const roomId = 'room-demo-telemetry'
-  const [submitMode, setSubmitMode] = useState<'any' | 'consensus'>('consensus')
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
-  const [submittedBy, setSubmittedBy] = useState<string | null>(null)
-  const hasResetRef = useRef(false)
+  const partyKitHost = import.meta.env.VITE_PARTYKIT_HOST as string | undefined;
+  const roomId = "room-demo-telemetry";
+  const [submitMode, setSubmitMode] = useState<"any" | "consensus">("consensus");
+  const [submitted, setSubmitted] = useState(false);
+  const [submittedBy, setSubmittedBy] = useState<string | null>(null);
+  const hasResetRef = useRef(false);
 
-  // Handler to mark that user has manually reset the form
   const handleReset = useCallback(() => {
-    hasResetRef.current = true
-    setSubmitted(false)
-    setSubmittedBy(null)
-  }, [])
-
-  // Load floating chat position from localStorage, default to bottom-left
-  // Use same default for SSR and initial client render to avoid hydration mismatch
-  const [floatingChatPosition, setFloatingChatPositionState] = useState<FloatingChatPosition>('bottom-left')
-
-  // Load from localStorage after hydration (useEffect only runs on client)
-  useEffect(() => {
-    const saved = localStorage.getItem('floatingChatPosition')
-    if (saved) {
-      setFloatingChatPositionState(saved as FloatingChatPosition)
-    }
-  }, [])
-
-  // Persist position to localStorage
-  const setFloatingChatPosition = (position: FloatingChatPosition) => {
-    setFloatingChatPositionState(position)
-    localStorage.setItem('floatingChatPosition', position)
-  }
+    hasResetRef.current = true;
+    setSubmitted(false);
+    setSubmittedBy(null);
+  }, []);
 
   return (
     <CollaborationHarnessWithTelemetry
@@ -645,27 +822,20 @@ function DemoTelemetryPage() {
       partyKitHost={partyKitHost}
       submitMode={submitMode}
       onFormSubmit={(submittedByUserId) => {
-        // Don't set submitted if user has manually reset the form
         if (!hasResetRef.current) {
-          setSubmitted(true)
-          setSubmittedBy(submittedByUserId)
+          setSubmitted(true);
+          setSubmittedBy(submittedByUserId);
         }
       }}
       onFormClear={() => {
-        // When any peer clears the form, reset our local state
-        console.log('[Demo Telemetry] Form cleared by a peer - resetting local state')
-        setSubmitted(false)
-        setSubmittedBy(null)
-        hasResetRef.current = false
+        setSubmitted(false);
+        setSubmittedBy(null);
+        hasResetRef.current = false;
       }}
-      onSubmitModeChange={(mode) => {
-        // When any peer changes submit mode, sync it locally
-        console.log('[Demo Telemetry] Submit mode changed by a peer to:', mode)
-        setSubmitMode(mode)
-      }}
+      onSubmitModeChange={(mode) => setSubmitMode(mode)}
       telemetryConfig={{
         enabled: true,
-        piiMode: 'capture', // Store raw values for testing
+        piiMode: "capture",
         sampleRate: 1.0,
         captureKeystrokes: true,
         captureCursors: false,
@@ -674,8 +844,6 @@ function DemoTelemetryPage() {
       <DemoPageContent
         submitMode={submitMode}
         setSubmitMode={setSubmitMode}
-        settingsOpen={settingsOpen}
-        setSettingsOpen={setSettingsOpen}
         partyKitHost={partyKitHost}
         roomId={roomId}
         submitted={submitted}
@@ -683,18 +851,14 @@ function DemoTelemetryPage() {
         submittedBy={submittedBy}
         setSubmittedBy={setSubmittedBy}
         onReset={handleReset}
-        floatingChatPosition={floatingChatPosition}
-        setFloatingChatPosition={setFloatingChatPosition}
       />
     </CollaborationHarnessWithTelemetry>
-  )
+  );
 }
 
 function DemoPageContent({
   submitMode,
   setSubmitMode,
-  settingsOpen,
-  setSettingsOpen,
   partyKitHost,
   roomId,
   submitted,
@@ -702,33 +866,29 @@ function DemoPageContent({
   submittedBy,
   setSubmittedBy,
   onReset,
-  floatingChatPosition,
-  setFloatingChatPosition,
 }: {
-  submitMode: 'any' | 'consensus'
-  setSubmitMode: (mode: 'any' | 'consensus') => void
-  settingsOpen: boolean
-  setSettingsOpen: (open: boolean) => void
-  partyKitHost: string | undefined
-  roomId: string
-  submitted: boolean
-  setSubmitted: (submitted: boolean) => void
-  submittedBy: string | null
-  setSubmittedBy: (userId: string | null) => void
-  onReset: () => void
-  floatingChatPosition: FloatingChatPosition
-  setFloatingChatPosition: (position: FloatingChatPosition) => void
+  submitMode: "any" | "consensus";
+  setSubmitMode: (mode: "any" | "consensus") => void;
+  partyKitHost: string | undefined;
+  roomId: string;
+  submitted: boolean;
+  setSubmitted: (submitted: boolean) => void;
+  submittedBy: string | null;
+  setSubmittedBy: (userId: string | null) => void;
+  onReset: () => void;
 }) {
   return (
     <div className="mx-auto max-w-2xl px-3 py-6 sm:px-4 sm:py-10">
       <div className="mb-4 sm:mb-6">
-        <a href="/" className="text-sm text-violet-600 hover:underline">← Back</a>
+        <a href="/" className="text-sm text-violet-600 hover:underline">
+          ← Back
+        </a>
         <h1 className="mt-2 text-xl font-bold text-gray-900 sm:text-2xl">
           Checkout form · telemetry demo
         </h1>
         <p className="mt-1 text-xs text-gray-500 sm:text-sm">
-          Same as /demo but with comprehensive telemetry tracking enabled.
-          All interactions are captured for analysis.
+          Same as /demo but with comprehensive telemetry tracking enabled. All
+          interactions are captured for analysis.
         </p>
       </div>
 
@@ -743,26 +903,10 @@ function DemoPageContent({
         />
       </div>
 
-      {/* User settings panel (inside harness to access context) */}
-      <SettingsPanelWrapper
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        floatingChatPosition={floatingChatPosition}
-        setFloatingChatPosition={setFloatingChatPosition}
-        submitMode={submitMode}
-        setSubmitMode={setSubmitMode}
-      />
-
-      {/* Floating cursor chat controls */}
-      <FloatingCursorChat
-        position={floatingChatPosition}
-        onSettingsClick={() => setSettingsOpen(true)}
-      />
-
       <div className="mt-6 space-y-6 sm:mt-8">
         <TelemetryInfoPanel />
         <AISimulatorPanel partyKitHost={partyKitHost} roomId={roomId} />
       </div>
     </div>
-  )
+  );
 }
