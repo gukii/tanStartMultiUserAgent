@@ -2587,30 +2587,6 @@ export function CollaborationHarness({
         </Suspense>
       )}
 
-      {/* Floating controls + settings panel – rendered for every harness instance */}
-      {!disabled && (
-        <>
-          <FloatingCursorChat
-            position={floatingChatPosition}
-            onSettingsClick={() => setSettingsOpen(true)}
-            aiHelpFloatingEnabled={aiHelpModes.includes('floating')}
-          />
-          <UserSettingsPanel
-            isOpen={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
-            userName={name}
-            userColor={color}
-            floatingChatPosition={floatingChatPosition}
-            submitMode={currentSubmitMode}
-            aiHelpModes={aiHelpModes}
-            updateUser={updateUser}
-            setFloatingChatPosition={setFloatingChatPosition}
-            setSubmitMode={(m) => setCurrentSubmitMode(m)}
-            setAIHelpModes={setAIHelpModes}
-          />
-        </>
-      )}
-
       {/* Ghost cursors for remote peers */}
       {Object.values(remoteCursors).map((cursor) => (
         <GhostCursor
@@ -2717,6 +2693,31 @@ export function CollaborationHarness({
         aria-hidden="true"
       />
       </div>
+
+      {/* Floating controls + settings panel – OUTSIDE containerRef so MutationObserver
+          doesn't pick up their inputs/buttons as form fields */}
+      {!disabled && (
+        <>
+          <FloatingCursorChat
+            position={floatingChatPosition}
+            onSettingsClick={() => setSettingsOpen(true)}
+            aiHelpFloatingEnabled={aiHelpModes.includes('floating')}
+          />
+          <UserSettingsPanel
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            userName={name}
+            userColor={color}
+            floatingChatPosition={floatingChatPosition}
+            submitMode={currentSubmitMode}
+            aiHelpModes={aiHelpModes}
+            updateUser={updateUser}
+            setFloatingChatPosition={setFloatingChatPosition}
+            setSubmitMode={(m) => setCurrentSubmitMode(m)}
+            setAIHelpModes={setAIHelpModes}
+          />
+        </>
+      )}
     </CollaborationContext.Provider>
   )
 }
