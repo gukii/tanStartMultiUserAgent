@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import type { FieldSchema } from '../types/collaboration'
+import type { FormContextStatus } from '../routes/api/form-context-status'
 
 console.log('[AIAgentButtons] Module loaded')
 
@@ -29,7 +30,7 @@ export function AIAgentButtons({
   disabled,
   containerRef,
 }: AIAgentButtonsProps) {
-  console.log('[AIAgentButtons] Component mounted/rendered', {
+  console.log('[AIAgentButtons] Component rendered', {
     roomId,
     pageSchemaCount: pageSchema.length,
     disabled,
@@ -37,6 +38,17 @@ export function AIAgentButtons({
   })
   const [status, setStatus] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [contextStatus, setContextStatus] = useState<FormContextStatus | null>(null)
+  const [showContextDetail, setShowContextDetail] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  // Fetch form context status once on mount
+  useEffect(() => {
+    fetch('/api/form-context-status')
+      .then(r => r.json())
+      .then((data: FormContextStatus) => setContextStatus(data))
+      .catch(() => {})
+  }, [])
 
   // Listen for floating ✨ button events
   // Scoped querySelector – prefers the harness container, falls back to document
@@ -432,13 +444,142 @@ export function AIAgentButtons({
     return fillFieldsWithParams(mode, pageSchema, roomId)
   }
 
+  // Derive current route for the analyze command
+  const currentRoute = typeof window !== 'undefined' ? window.location.pathname : ''
+
+  // Determine context banner variant
+  const contextBanner = (() => {
+    if (!contextStatus) return null
+    if (!contextStatus.exists) {
+      return { kind: 'missing' as const }
+    }
+    if (contextStatus.ageDays !== null && contextStatus.ageDays > 7) {
+      return { kind: 'stale' as const, ageDays: contextStatus.ageDays }
+    }
+    // Check if current route is covered
+    const covered = Object.keys(contextStatus.routes).some(r =>
+      currentRoute === r || currentRoute.startsWith(r + '/')
+    )
+    return {
+      kind: 'ok' as const,
+      fieldCount: contextStatus.fieldCount,
+      routeCount: contextStatus.routeCount,
+      covered,
+    }
+  })()
+
+  // Copy the analyze command to clipboard
+  function copyCommand() {
+    const cmd = currentRoute
+      ? `pnpm analyze-forms --route=${currentRoute}`
+      : 'pnpm analyze-forms'
+    navigator.clipboard.writeText(cmd).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  // Current route's context data (for review panel)
+  const routeContext = contextStatus?.routes[currentRoute]
+    ?? Object.entries(contextStatus?.routes ?? {}).find(([r]) =>
+        currentRoute.startsWith(r + '/') || currentRoute === r
+      )?.[1]
+
   return (
     <div className="mt-4 rounded-lg border border-dashed border-violet-300 bg-violet-50 p-4">
+      {/* Header */}
       <div className="mb-2 flex items-center gap-2">
         <span className="text-lg">🤖</span>
         <h3 className="text-sm font-semibold text-violet-900">AI Agent</h3>
       </div>
 
+      {/* Form context status banner */}
+      {contextBanner?.kind === 'missing' && (
+        <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-medium">⚠️ Form analysis not run</p>
+          <p className="mt-0.5 text-amber-700">
+            AI fill uses generic data. Run analysis for smarter, context-aware suggestions.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-xs">
+              {currentRoute ? `pnpm analyze-forms --route=${currentRoute}` : 'pnpm analyze-forms'}
+            </code>
+            <button
+              onClick={copyCommand}
+              className="rounded bg-amber-200 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-300 transition"
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {contextBanner?.kind === 'stale' && (
+        <div className="mb-3 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+          <p className="font-medium">⏱ Form analysis is {contextBanner.ageDays} days old</p>
+          <p className="mt-0.5 text-yellow-700">Consider re-running to reflect form changes.</p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="rounded bg-yellow-100 px-1.5 py-0.5 font-mono text-xs">
+              {currentRoute ? `pnpm analyze-forms --route=${currentRoute}` : 'pnpm analyze-forms'}
+            </code>
+            <button
+              onClick={copyCommand}
+              className="rounded bg-yellow-200 px-2 py-0.5 text-xs font-medium text-yellow-900 hover:bg-yellow-300 transition"
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {contextBanner?.kind === 'ok' && (
+        <div className="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+          <div className="flex items-center justify-between gap-2">
+            <span>
+              ✓ Form context loaded ·{' '}
+              {contextBanner.routeCount} route{contextBanner.routeCount !== 1 ? 's' : ''},{' '}
+              {contextBanner.fieldCount} field{contextBanner.fieldCount !== 1 ? 's' : ''}
+              {!contextBanner.covered && (
+                <span className="ml-1 text-yellow-700">· current route not analyzed</span>
+              )}
+            </span>
+            {routeContext && (
+              <button
+                onClick={() => setShowContextDetail(v => !v)}
+                className="shrink-0 rounded bg-green-100 px-2 py-0.5 font-medium text-green-800 hover:bg-green-200 transition"
+              >
+                {showContextDetail ? 'Hide' : 'Review'}
+              </button>
+            )}
+          </div>
+
+          {/* Review panel */}
+          {showContextDetail && routeContext && (
+            <div className="mt-2 max-h-56 overflow-y-auto rounded border border-green-200 bg-white p-2">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-green-100">
+                    <th className="pb-1 pr-3 font-semibold text-gray-700">Field</th>
+                    <th className="pb-1 pr-3 font-semibold text-gray-700">Intent</th>
+                    <th className="pb-1 font-semibold text-gray-700">Example values</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(routeContext.fields).map(([fieldId, mapping]) => (
+                    <tr key={fieldId} className="border-b border-green-50">
+                      <td className="py-1 pr-3 font-mono text-gray-600">{fieldId}</td>
+                      <td className="py-1 pr-3 text-gray-600">{mapping.intent}</td>
+                      <td className="py-1 text-gray-500">{mapping.exampleValues.slice(0, 3).join(', ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Action buttons */}
       <div className="mb-3 flex flex-wrap gap-2">
         <button
           onClick={() => fillFields('fill-empty')}
@@ -460,9 +601,7 @@ export function AIAgentButtons({
       </div>
 
       {status && (
-        <p className="text-xs text-violet-700">
-          {status}
-        </p>
+        <p className="text-xs text-violet-700">{status}</p>
       )}
     </div>
   )
