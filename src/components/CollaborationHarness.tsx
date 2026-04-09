@@ -274,6 +274,30 @@ function ValidationErrorNotification({
  * `input` + `change` events so that React's synthetic event system picks it up
  * (works with controlled components including TanStack Form).
  */
+/** Clear all form fields within a container, using the native setter so React picks up the change. */
+function clearDOMFields(container: HTMLElement | null) {
+  if (!container) return
+  container.querySelectorAll<HTMLElement>('input, textarea, select').forEach((element) => {
+    if (element instanceof HTMLInputElement) {
+      if (element.type === 'checkbox' || element.type === 'radio') {
+        element.checked = false
+        const ev = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+        ev.__remoteOrigin = true
+        element.dispatchEvent(ev)
+      } else {
+        setNativeInputValue(element, '')
+      }
+    } else if (element instanceof HTMLTextAreaElement) {
+      setNativeInputValue(element, '')
+    } else if (element instanceof HTMLSelectElement) {
+      element.selectedIndex = 0
+      const ev = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+      ev.__remoteOrigin = true
+      element.dispatchEvent(ev)
+    }
+  })
+}
+
 function setNativeInputValue(
   el: HTMLInputElement | HTMLTextAreaElement,
   value: string,
@@ -497,6 +521,23 @@ export function CollaborationHarness({
       const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
       changeEvent.__remoteOrigin = true
       el.dispatchEvent(changeEvent)
+    } else if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      el.checked = value === 'on'
+      const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+      changeEvent.__remoteOrigin = true
+      el.dispatchEvent(changeEvent)
+    } else if (el instanceof HTMLInputElement && el.type === 'radio') {
+      // For radio: find the specific radio button with matching value and check it
+      const container2 = containerRef.current
+      if (container2) {
+        const radios = container2.querySelectorAll<HTMLInputElement>(`[name="${CSS.escape(el.name)}"]`)
+        radios.forEach(radio => {
+          radio.checked = radio.value === value
+          const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
+          changeEvent.__remoteOrigin = true
+          radio.dispatchEvent(changeEvent)
+        })
+      }
     } else {
       setNativeInputValue(el, value)
     }
@@ -773,36 +814,8 @@ export function CollaborationHarness({
           // Clear local field timestamps to prevent stale update rejection
           fieldTimestamps.current = {}
 
-          // Clear all DOM fields
-          const formElements = document.querySelectorAll('form input, form textarea, form select')
-          formElements.forEach((element) => {
-            if (element instanceof HTMLInputElement) {
-              if (element.type === 'checkbox' || element.type === 'radio') {
-                element.checked = false
-              } else {
-                element.value = ''
-              }
-              const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-              const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-              inputEvent.__remoteOrigin = true
-              changeEvent.__remoteOrigin = true
-              element.dispatchEvent(inputEvent)
-              element.dispatchEvent(changeEvent)
-            } else if (element instanceof HTMLTextAreaElement) {
-              element.value = ''
-              const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-              const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-              inputEvent.__remoteOrigin = true
-              changeEvent.__remoteOrigin = true
-              element.dispatchEvent(inputEvent)
-              element.dispatchEvent(changeEvent)
-            } else if (element instanceof HTMLSelectElement) {
-              element.selectedIndex = 0
-              const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-              changeEvent.__remoteOrigin = true
-              element.dispatchEvent(changeEvent)
-            }
-          })
+          // Clear all DOM fields – scoped to the harness container
+          clearDOMFields(containerRef.current)
 
           // Notify parent component
           onFormClear?.()
@@ -2308,7 +2321,12 @@ export function CollaborationHarness({
       fieldTimestamps.current[fieldId] = timestamp
       fieldActivityTimestamps.current[fieldId] = timestamp // Update our own activity
 
-      send({ type: 'UPDATE_FIELD', fieldId, value: target.value, timestamp })
+      // For checkboxes use checked state; for radios use value (the selected option)
+      const value = (target instanceof HTMLInputElement && target.type === 'checkbox')
+        ? (target.checked ? 'on' : '')
+        : target.value
+
+      send({ type: 'UPDATE_FIELD', fieldId, value, timestamp })
 
       // Check validity after local update and notify server
       const isValid = target.checkValidity()
@@ -2453,36 +2471,9 @@ export function CollaborationHarness({
     fieldTimestamps.current = {}
 
     // Clear all DOM fields immediately (don't wait for server echo)
-    const formElements = document.querySelectorAll('form input, form textarea, form select')
-    formElements.forEach((element) => {
-      if (element instanceof HTMLInputElement) {
-        if (element.type === 'checkbox' || element.type === 'radio') {
-          element.checked = false
-        } else {
-          element.value = ''
-        }
-        const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-        const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-        inputEvent.__remoteOrigin = true
-        changeEvent.__remoteOrigin = true
-        element.dispatchEvent(inputEvent)
-        element.dispatchEvent(changeEvent)
-      } else if (element instanceof HTMLTextAreaElement) {
-        element.value = ''
-        const inputEvent = new Event('input', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-        const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-        inputEvent.__remoteOrigin = true
-        changeEvent.__remoteOrigin = true
-        element.dispatchEvent(inputEvent)
-        element.dispatchEvent(changeEvent)
-      } else if (element instanceof HTMLSelectElement) {
-        element.selectedIndex = 0
-        const changeEvent = new Event('change', { bubbles: true }) as Event & { __remoteOrigin?: boolean }
-        changeEvent.__remoteOrigin = true
-        element.dispatchEvent(changeEvent)
-      }
-    })
-  }, [send])
+    clearDOMFields(containerRef.current)
+
+  }, [send, containerRef])
 
   const broadcastServerErrors = useCallback((errors: Array<{ field: string; message: string }>) => {
     send({ type: 'SERVER_VALIDATION_ERRORS', errors })
