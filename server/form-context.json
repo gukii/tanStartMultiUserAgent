@@ -1,0 +1,280 @@
+{
+  "analyzedAt": "2026-04-11T05:38:56.763Z",
+  "routes": {
+    "/demo-telemetry": {
+      "fields": {
+        "firstName": {
+          "intent": "Capture the customer's first name for order or service processing",
+          "description": "Single name of a person, typically the given name, with exactly one capital letter at the beginning and no special characters or numbers.",
+          "format": "Name starting with uppercase letter (e.g. Alice)",
+          "exampleValues": [
+            "Alice",
+            "Evelyn",
+            "Harrison",
+            "Margot",
+            "Cedric",
+            "Luna",
+            "Finnley",
+            "Ruby",
+            "Sage",
+            "Willow"
+          ]
+        },
+        "lastName": {
+          "intent": "Customer last name field for a customer",
+          "description": "Last name of the customer, exactly 5 characters long with no space (e.g. 'Smith')",
+          "format": "exactly 5 alphanumeric characters with no spaces",
+          "exampleValues": [
+            "Jones",
+            "Brown",
+            "Miller",
+            "Davis",
+            "Wilson",
+            "Moore",
+            "Taylor",
+            "Anderson",
+            "Thomas",
+            "Harrison"
+          ]
+        },
+        "email": {
+          "intent": "Customer email address for someone",
+          "description": "Email address in the format user@example.com, for example 'alice@example.com'",
+          "format": "user@domain.tld",
+          "exampleValues": [
+            "john.doe@example.com",
+            "emily_smith@email.co.uk",
+            "anna.kowalska@outlook.de",
+            "benjaminbrown@gmail.com",
+            "sophie.lawrence@yahoo.fr",
+            "lucas.parker@aol.net",
+            "matt.harris@hotmail.ca",
+            "hannah.garcia@mail.org",
+            "isaac.white@protocol.io",
+            "charlie.davis@live.vn"
+          ]
+        },
+        "cardNumber": {
+          "intent": "Enter a valid credit card number",
+          "description": "A 16-digit numeric value with spaces in the format XXXX XXXX XXXX XXXX, representing a payment card",
+          "format": "16 digits with spaces (XXXX XXXX XXXX XXXX)",
+          "exampleValues": [
+            "4242 1234 5678 9012",
+            "5105 1051 0510 5105",
+            "4532 1143 2149 8765",
+            "371449635398431",
+            "6011 1111 1111 1117",
+            "6771546423819336",
+            "3009007519277365",
+            "6331101976234628",
+            "6056930840367380",
+            "4916124454123456"
+          ]
+        },
+        "expiry": {
+          "intent": "Customer card expiry date",
+          "description": "Two-digit month and two-digit year in MM/YY format, e.g. 05/23",
+          "format": "MM/YY",
+          "exampleValues": [
+            "12/25",
+            "03/20",
+            "08/19",
+            "01/22",
+            "09/24",
+            "06/21",
+            "04/18",
+            "11/23",
+            "02/26",
+            "07/17"
+          ]
+        },
+        "cvv": {
+          "intent": "Verify Card Verification Value (CVV) for secure payment",
+          "description": "A 3-digit number used to confirm card details, following the exact format of '123'",
+          "format": "3 digits",
+          "exampleValues": [
+            "111",
+            "542",
+            "919",
+            "275",
+            "118",
+            "467",
+            "983",
+            "219",
+            "756",
+            "382"
+          ]
+        },
+        "address": {
+          "intent": "To provide the customer's street address, including house number",
+          "description": "Street address format: <house number> <street name>, e.g. '123 Main St'",
+          "format": "123 <street name>",
+          "exampleValues": [
+            "456 Elm St",
+            "789 Oak Ave",
+            "321 Maple St",
+            "901 Pine Rd",
+            "567 Walnut St",
+            "234 Cedar Ln",
+            "135 Spruce St",
+            "960 Ashwood Dr",
+            "741 Briarwood Way",
+            "654 Cherry St"
+          ]
+        },
+        "city": {
+          "intent": "Provide a valid street address including house number",
+          "description": "Street address format: exact city name, e.g. 'San Francisco'",
+          "format": "exact city name",
+          "exampleValues": [
+            "New York",
+            "London",
+            "Paris",
+            "Tokyo",
+            "Sydney",
+            "Beijing",
+            "Rome",
+            "Mumbai",
+            "Dubai",
+            "Kuala Lumpur"
+          ]
+        },
+        "country": {
+          "intent": "Select the country for a customer's shipping address",
+          "description": "Country selection in ISO 3166-1 alpha-2 code format, chosen from US, DE, GB, FR, AU options",
+          "format": "ISO country code (e.g. US, DE)",
+          "exampleValues": [
+            "US",
+            "DE",
+            "GB",
+            "FR",
+            "AU",
+            "US",
+            "GB",
+            "FR",
+            "AU",
+            "DE"
+          ]
+        },
+        "notes": {
+          "intent": "Provide special delivery instructions for the customer.",
+          "description": "Leave specific delivery instructions at door, e.g. ring bell, leave in mailbox, etc.",
+          "format": "phrases such as 'ring bell', 'leave on porch', 'sign for package'",
+          "exampleValues": [
+            "Ring the doorbell and leave the package on the front porch.",
+            "Leave the package with a neighbor at 123 Main St.",
+            "Place the package in the secure locker on the left side of the building.",
+            "Call me at 555-1234 to arrange for delivery.",
+            "Leave the package in the mailbox, but only if it fits.",
+            "Ring the bell and then leave the package inside the house.",
+            "If no one is home, leave the package with the mailman.",
+            "Put the package on the top step of the porch.",
+            "Leave a note with the package saying 'Happy Birthday'!",
+            "Bring the package up to the third floor apartment 3B."
+          ]
+        },
+        "newsletter": {
+          "intent": "checkbox: newsletter",
+          "description": "Checkbox. Use \"on\" to check, \"\" to uncheck.",
+          "exampleValues": [
+            "on",
+            ""
+          ]
+        },
+        "terms": {
+          "intent": "checkbox: Subscribe to newsletter",
+          "description": "Checkbox. Use \"on\" to check, \"\" to uncheck.",
+          "exampleValues": [
+            "on",
+            ""
+          ]
+        },
+        "deliverySpeed": {
+          "intent": "Select the desired delivery speed option",
+          "description": "Specify how quickly an order should be delivered, including options such as Standard, Expedited, and Express.",
+          "format": "enum (e.g. Standard, Expedited, Express)",
+          "exampleValues": [
+            "Standard",
+            "Expedited",
+            "Express",
+            "Same Day",
+            "Next Business Day",
+            "2-Day Shipping",
+            "3-Day Shipping",
+            "Free Shipping",
+            "Ground Shipping",
+            "Priority Shipping"
+          ]
+        },
+        "promoCode": {
+          "intent": "To enter a promo code for overnight delivery",
+          "description": "A promo code in the format 'Promo code (if any)' with empty string as no code is provided, or a short alphanumeric sequence",
+          "format": "Alphanumeric characters followed by optional space and 'Promo code (if any)' enclosed in single quotes",
+          "exampleValues": [
+            "'PROMOCODE123'",
+            "'Free shipping promo'",
+            "'No code needed'",
+            "'SPECIAL10'",
+            "'Buy1Get1free'",
+            "'SAVE20%",
+            "'Code not required'",
+            "'Special offer code'",
+            "'No promo code needed'",
+            "'Use our site credit'"
+          ]
+        },
+        "quantity": {
+          "intent": "To specify the quantity of items purchased",
+          "description": "An integer value representing the number of items, expected format is a single digit or multiple digits with no leading zeros (e.g. '1', '12')",
+          "format": "Single or multiple digits with no leading zeros",
+          "exampleValues": [
+            "1",
+            "5",
+            "12",
+            "7",
+            "23",
+            "99",
+            "42",
+            "9",
+            "0",
+            "8"
+          ]
+        },
+        "deliveryDate": {
+          "intent": "Date of delivery for an order",
+          "description": "Date in the future that indicates when a customer would like to receive their order. Format: YYYY-MM-DD.",
+          "format": "YYYY-MM-DD",
+          "exampleValues": [
+            "2026-04-15",
+            "2027-06-01",
+            "2028-03-20",
+            "2030-09-10",
+            "2029-11-25",
+            "2031-05-15",
+            "2027-02-28",
+            "2032-07-01",
+            "2026-12-24",
+            "2028-08-31"
+          ]
+        },
+        "phone": {
+          "intent": "Customer phone number for delivery or support",
+          "description": "A phone number in the format '123-456-7890' with a US area code, exactly 10 digits including spaces, used to contact customers",
+          "format": "XXX-XXX-XXXX",
+          "exampleValues": [
+            "415-123-4567",
+            "650-901-2345",
+            "408-111-2222",
+            "925-555-6666",
+            "510-789-0123",
+            "619-876-5432",
+            "916-654-3210",
+            "831-765-4321",
+            "707-987-6543",
+            "510-123-4567"
+          ]
+        }
+      }
+    }
+  }
+}

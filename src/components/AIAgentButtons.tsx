@@ -165,6 +165,7 @@ export function AIAgentButtons({
           fields: fieldsToEvaluate,
           currentValues,
           mode: 'single-field',
+          route: window.location.pathname,
         }),
       })
 
@@ -331,6 +332,7 @@ export function AIAgentButtons({
           fields: validFields,
           currentValues: liveFieldValues,
           mode,
+          route: window.location.pathname,
         }),
       })
 

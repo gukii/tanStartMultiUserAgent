@@ -43,6 +43,8 @@ interface SuggestionRequest {
   fields: FieldSchema[]
   currentValues: Record<string, string>
   mode: 'fill-empty' | 'complete' | 'single-field'
+  /** Current page route path, e.g. "/demo-telemetry" */
+  route?: string
 }
 
 interface FieldSuggestion {
@@ -58,6 +60,7 @@ interface SuggestionResponse {
 interface FieldMapping {
   intent: string
   description: string
+  format?: string
   exampleValues: string[]
 }
 
@@ -435,17 +438,18 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
 
         try {
           const body = (await request.json()) as SuggestionRequest
-          const { fields, currentValues, mode } = body
+          const { fields, currentValues, mode, route = '/' } = body
 
           console.log('[API] ai-suggest-fields request:', {
             mode,
+            route,
             fieldCount: fields.length,
             fields: fields.map(f => ({ id: f.id, type: f.type, label: f.label }))
           })
 
           // Load form context (LLM-generated mappings)
           const formContext = await loadFormContext()
-          const route = request.headers.get('referer')?.split(request.url.split('/').slice(0, 3).join('/'))[1]?.split('?')[0] || '/'
+          console.log('[API] Form context routes:', formContext ? Object.keys(formContext.routes) : 'none')
 
           const suggestions: FieldSuggestion[] = []
 
