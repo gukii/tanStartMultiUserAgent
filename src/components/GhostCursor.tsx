@@ -34,9 +34,9 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
   const [pos, setPos] = useState({ left: 0, top: 0 })
   const [isStale, setIsStale] = useState(false)
 
-  // Cache field element to avoid repeated queries for the same field
-  // Using useRef instead of useState to avoid unnecessary re-renders
   const cachedFieldRef = useRef<{ name: string; element: HTMLElement } | null>(null)
+  // Track last mode to log only on transitions
+  const lastModeRef = useRef<'field' | 'gap' | null>(null)
 
   // Detect stale cursors (no movement for 10 seconds)
   useLayoutEffect(() => {
@@ -58,14 +58,8 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
       if (!container) return
       const cRect = container.getBoundingClientRect()
 
-      // Get local scroll position
-      const localScrollX = window.scrollX || window.pageXOffset || 0
-      const localScrollY = window.scrollY || window.pageYOffset || 0
-
-      // Get sender's scroll context (default 0 for backward compatibility)
-      const senderScrollX = cursor.scrollX ?? 0
-      const senderScrollY = cursor.scrollY ?? 0
-
+      // Using position:fixed — all coordinates are in visual viewport space.
+      // This eliminates coordinate system confusion between absolute/relative containers.
       let left: number
       let top: number
 
@@ -74,12 +68,11 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
         cursor.fieldRelativeX !== undefined &&
         cursor.fieldRelativeY !== undefined
       ) {
-        // Field-relative positioning (best accuracy across devices)
-        // Use cached field element if it matches, otherwise query
+        // Field-relative: look up the field's current viewport rect and
+        // place the cursor proportionally within it.
         let fieldEl: HTMLElement | null = null
         const cached = cachedFieldRef.current
         if (cached && cached.name === cursor.activeField) {
-          // Verify cached element is still in DOM
           if (document.contains(cached.element)) {
             fieldEl = cached.element
           } else {
@@ -98,25 +91,40 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
 
         if (fieldEl) {
           const fRect = fieldEl.getBoundingClientRect()
-          // Document-relative position
-          left = fRect.left + localScrollX + cursor.fieldRelativeX * fRect.width
-          top = fRect.top + localScrollY + cursor.fieldRelativeY * fRect.height
+          left = fRect.left + cursor.fieldRelativeX * fRect.width
+          top = fRect.top + cursor.fieldRelativeY * fRect.height
+          if (lastModeRef.current !== 'field') {
+            console.log('[GhostCursor] →field', { field: cursor.activeField, fRect_left: fRect.left, cRect_left: cRect.left, left, top })
+            lastModeRef.current = 'field'
+          }
         } else {
-          // Field not rendered - use container fallback
-          left = cRect.left + localScrollX + cursor.x * cRect.width
-          top = cRect.top + localScrollY + cursor.y * cRect.height
+          const formEl = container.querySelector('form') as HTMLElement | null
+          const refRect = formEl ? formEl.getBoundingClientRect() : cRect
+          const refWidth = cursor.containerWidth ?? refRect.width
+          const refHeight = cursor.containerHeight ?? refRect.height
+          left = refRect.left + cursor.x * refWidth
+          top = refRect.top + cursor.y * refHeight
+          if (lastModeRef.current !== 'gap') {
+            console.log('[GhostCursor] →gap (field not found)', { field: cursor.activeField, cursor_x: cursor.x, refLeft: refRect.left, refWidth, left, top })
+            lastModeRef.current = 'gap'
+          }
         }
       } else {
-        // Container-relative with scroll compensation
-        // Clear cached field when not in any field
         cachedFieldRef.current = null
-
-        // Compute scroll delta to align across devices
-        const scrollDeltaX = localScrollX - senderScrollX
-        const scrollDeltaY = localScrollY - senderScrollY
-
-        left = cRect.left + localScrollX + cursor.x * cRect.width - scrollDeltaX
-        top = cRect.top + localScrollY + cursor.y * cRect.height - scrollDeltaY
+        // Decode gap-mode x/y using the receiver's own form element as the origin.
+        // The sender encoded x relative to its form's left edge; both forms share
+        // the same max-w-2xl CSS so formWidth is identical, only the centering
+        // offset differs — each side independently applies its own form's left.
+        const formEl = container.querySelector('form') as HTMLElement | null
+        const refRect = formEl ? formEl.getBoundingClientRect() : cRect
+        const refWidth = cursor.containerWidth ?? refRect.width
+        const refHeight = cursor.containerHeight ?? refRect.height
+        left = refRect.left + cursor.x * refWidth
+        top = refRect.top + cursor.y * refHeight
+        if (lastModeRef.current !== 'gap') {
+          console.log('[GhostCursor] →gap', { cursor_x: cursor.x, refLeft: refRect.left, refWidth, left, top })
+          lastModeRef.current = 'gap'
+        }
       }
 
       setPos({ left, top })
@@ -155,7 +163,7 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
     <div
       className="ghost-cursor"
       style={{
-        position: 'absolute',
+        position: 'fixed',
         left: pos.left,
         top: pos.top,
         pointerEvents: 'none',

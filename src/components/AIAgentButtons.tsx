@@ -13,8 +13,6 @@ import { useState, useEffect, useRef } from 'react'
 import type { FieldSchema } from '../types/collaboration'
 import type { FormContextStatus } from '../routes/api/form-context-status'
 
-console.log('[AIAgentButtons] Module loaded')
-
 interface AIAgentButtonsProps {
   roomId: string
   pageSchema: FieldSchema[]
@@ -30,12 +28,6 @@ export function AIAgentButtons({
   disabled,
   containerRef,
 }: AIAgentButtonsProps) {
-  console.log('[AIAgentButtons] Component rendered', {
-    roomId,
-    pageSchemaCount: pageSchema.length,
-    disabled,
-    fieldValuesCount: Object.keys(fieldValues).length
-  })
   const [status, setStatus] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [contextStatus, setContextStatus] = useState<FormContextStatus | null>(null)
@@ -72,10 +64,7 @@ export function AIAgentButtons({
   }, [pageSchema, roomId])
 
   useEffect(() => {
-    console.log('[AIAgentButtons] Setting up event listeners (once on mount)')
-
     function handleFillAll() {
-      console.log('[AIAgentButtons] Received ai-help-fill-all event')
       // Use ref to get latest pageSchema/roomId without re-attaching listeners
       fillFieldsWithParams('fill-empty', pageSchemaRef.current, roomIdRef.current)
     }
@@ -92,10 +81,8 @@ export function AIAgentButtons({
 
     window.addEventListener('ai-help-fill-all', handleFillAll)
     window.addEventListener('ai-help-field-selected', handleFieldSelected as EventListener)
-    console.log('[AIAgentButtons] Event listeners attached')
 
     return () => {
-      console.log('[AIAgentButtons] Cleaning up event listeners')
       window.removeEventListener('ai-help-fill-all', handleFillAll)
       window.removeEventListener('ai-help-field-selected', handleFieldSelected as EventListener)
     }
@@ -151,12 +138,6 @@ export function AIAgentButtons({
         }
       })
 
-      console.log('[AIAgentButtons] Calling API for fields:', {
-        count: fieldsToEvaluate.length,
-        fields: fieldsToEvaluate.map(f => f.id),
-        currentValues
-      })
-
       // Call API with all fields to evaluate
       const response = await fetch('/api/ai-suggest-fields', {
         method: 'POST',
@@ -175,8 +156,6 @@ export function AIAgentButtons({
 
       const data = await response.json()
       const suggestions = data.suggestions || []
-
-      console.log('[AIAgentButtons] Received suggestions:', suggestions.length, suggestions)
 
       if (suggestions.length === 0) {
         setStatus('No suggestions available')
@@ -199,17 +178,9 @@ export function AIAgentButtons({
           ) ?? scopedQuery(`[name="${suggestion.fieldId}"]`) as HTMLInputElement | null
 
           if (element) {
-            console.log('[AIAgentButtons] Applying suggestion:', {
-              fieldId: suggestion.fieldId,
-              value: suggestion.value,
-              type: (element as HTMLInputElement).type
-            })
-
             const inputEl = element as HTMLInputElement
             if (inputEl.type === 'checkbox') {
-              const shouldCheck = suggestion.value === 'on'
-              inputEl.checked = shouldCheck
-              console.log(`[AIAgentButtons] Setting ${suggestion.fieldId} checkbox to:`, shouldCheck)
+              inputEl.checked = suggestion.value === 'on'
             } else if (inputEl.type === 'radio') {
               const radioButton = scopedQuery(`[name="${suggestion.fieldId}"][value="${suggestion.value}"]`) as HTMLInputElement | null
               if (radioButton) {
@@ -267,18 +238,13 @@ export function AIAgentButtons({
       // Note: field.id in schema is actually the field's "name" attribute (canonical identifier)
       const liveFieldValues: Record<string, string> = {}
 
-      console.log('[AIAgentButtons] Reading DOM values for', schema.length, 'fields')
-
       schema.forEach((field, index) => {
         const element = (
           scopedQuery(`[data-collab-field-index="${field.elementIndex}"]`) ??
           scopedQuery(`[name="${field.id}"]`)
         ) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
 
-        if (!element) {
-          console.log(`[AIAgentButtons] Field ${index}: ${field.id} - NOT FOUND in DOM`)
-          return
-        }
+        if (!element) return
 
         // For checkboxes and radio buttons, handle specially
         if (element.type === 'checkbox') {
@@ -290,9 +256,6 @@ export function AIAgentButtons({
           liveFieldValues[field.id] = element.value || ''
         }
       })
-
-      console.log('[AIAgentButtons] Live field values from DOM:', liveFieldValues)
-      console.log('[AIAgentButtons] Stale fieldValues prop (for comparison):', fieldValues)
 
       // Filter out fields that weren't found in DOM (buttons with auto-generated names)
       // Also deduplicate radio buttons (keep only one entry per group)
@@ -316,15 +279,6 @@ export function AIAgentButtons({
         validFields.push(field)
       })
 
-      console.log('[AIAgentButtons] Valid fields after filtering:', validFields.length, '(filtered from', schema.length, ')')
-
-      // Call API to get suggestions
-      console.log('[AIAgentButtons] Calling API with:', {
-        fields: validFields.length,
-        currentValues: liveFieldValues,
-        mode
-      })
-
       const response = await fetch('/api/ai-suggest-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -336,8 +290,6 @@ export function AIAgentButtons({
         }),
       })
 
-      console.log('[AIAgentButtons] API response status:', response.status, response.statusText)
-
       if (!response.ok) {
         const errorText = await response.text()
         console.error('[AIAgentButtons] API error:', errorText)
@@ -345,10 +297,7 @@ export function AIAgentButtons({
       }
 
       const data = await response.json()
-      console.log('[AIAgentButtons] API response data:', data)
       const suggestions = data.suggestions || []
-
-      console.log('[AIAgentButtons] Suggestions received:', suggestions.length)
 
       if (suggestions.length === 0) {
         setStatus('No fields to fill')
@@ -372,9 +321,6 @@ export function AIAgentButtons({
       const ws = new WebSocket(url)
 
       ws.onopen = () => {
-        console.log('[AIAgentButtons] WebSocket opened, sending suggestions:', suggestions)
-
-        // Apply changes directly to DOM AND send WebSocket messages
         suggestions.forEach((suggestion: any, index: number) => {
           const schemaField = schema.find(f => f.id === suggestion.fieldId)
           const element = (
@@ -395,20 +341,15 @@ export function AIAgentButtons({
             element.dispatchEvent(new Event('change', { bubbles: true }))
           }
 
-          // Send WebSocket message so other peers see the change
-          const message = {
+          ws.send(JSON.stringify({
             type: 'UPDATE_FIELD',
             fieldId: suggestion.fieldId,
             value: suggestion.value,
             timestamp: Date.now(),
-          }
-          console.log(`[AIAgentButtons] Sending message ${index + 1}/${suggestions.length}:`, message)
-          ws.send(JSON.stringify(message))
+          }))
         })
 
-        // Close connection after sending
         setTimeout(() => {
-          console.log('[AIAgentButtons] Closing WebSocket connection')
           ws.close()
           const verb = mode === 'fill-empty' ? 'filled' : 'fixed'
           setStatus(`✓ ${suggestions.length} field${suggestions.length > 1 ? 's' : ''} ${verb}`)

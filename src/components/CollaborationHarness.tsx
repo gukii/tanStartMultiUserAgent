@@ -1030,8 +1030,16 @@ export function CollaborationHarness({
       const adjustedClientY = clientY - vvOffsetY
 
       const cRect = container.getBoundingClientRect()
-      const x = (adjustedClientX - cRect.left) / cRect.width
-      const y = (adjustedClientY - cRect.top) / cRect.height
+
+      // For gap-mode x/y, use the <form> element's rect as the reference so that
+      // centered max-w-2xl forms align correctly across different viewport widths.
+      // Both sender and receiver independently measure their own form rect; since
+      // the CSS is identical the form width is the same, only the centering offset
+      // differs — and each side applies its own offset on encode/decode.
+      const formEl = container.querySelector('form') as HTMLElement | null
+      const refRect = formEl ? formEl.getBoundingClientRect() : cRect
+      const x = (adjustedClientX - refRect.left) / refRect.width
+      const y = (adjustedClientY - refRect.top) / refRect.height
 
       // Capture scroll position for cross-device alignment
       const scrollX = window.scrollX || window.pageXOffset || 0
@@ -1067,6 +1075,8 @@ export function CollaborationHarness({
         fieldRelativeY,
         scrollX,
         scrollY,
+        containerWidth: refRect.width,
+        containerHeight: refRect.height,
       }
       lastCursorPosition.current = position
       send({ type: 'CURSOR_MOVE', position })

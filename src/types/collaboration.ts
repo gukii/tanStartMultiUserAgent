@@ -19,6 +19,14 @@ export interface CursorPosition {
   scrollX?: number
   /** Scroll position from sender (for cross-device alignment) */
   scrollY?: number
+  /**
+   * Sender's form element width/height.
+   * Used by gap-mode rendering: receiver decodes x/y using its own form's left/top
+   * as the origin, and sender's form width/height as the scale — keeping gap cursors
+   * aligned with field-relative cursors across different viewport widths.
+   */
+  containerWidth?: number
+  containerHeight?: number
 }
 
 export interface UserInfo {
