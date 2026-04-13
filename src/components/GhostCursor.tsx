@@ -100,12 +100,10 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
         } else {
           const formEl = container.querySelector('form') as HTMLElement | null
           const refRect = formEl ? formEl.getBoundingClientRect() : cRect
-          const refWidth = cursor.containerWidth ?? refRect.width
-          const refHeight = cursor.containerHeight ?? refRect.height
-          left = refRect.left + cursor.x * refWidth
-          top = refRect.top + cursor.y * refHeight
+          left = refRect.left + cursor.x * refRect.width
+          top = refRect.top + cursor.y * refRect.height
           if (lastModeRef.current !== 'gap') {
-            console.log('[GhostCursor] →gap (field not found)', { field: cursor.activeField, cursor_x: cursor.x, refLeft: refRect.left, refWidth, left, top })
+            console.log('[GhostCursor] →gap (field not found)', { field: cursor.activeField, cursor_x: cursor.x, refLeft: refRect.left, refWidth: refRect.width, left, top })
             lastModeRef.current = 'gap'
           }
         }
@@ -117,12 +115,10 @@ export function GhostCursor({ cursor, containerRef }: GhostCursorProps) {
         // offset differs — each side independently applies its own form's left.
         const formEl = container.querySelector('form') as HTMLElement | null
         const refRect = formEl ? formEl.getBoundingClientRect() : cRect
-        const refWidth = cursor.containerWidth ?? refRect.width
-        const refHeight = cursor.containerHeight ?? refRect.height
-        left = refRect.left + cursor.x * refWidth
-        top = refRect.top + cursor.y * refHeight
+        left = refRect.left + cursor.x * refRect.width
+        top = refRect.top + cursor.y * refRect.height
         if (lastModeRef.current !== 'gap') {
-          console.log('[GhostCursor] →gap', { cursor_x: cursor.x, refLeft: refRect.left, refWidth, left, top })
+          console.log('[GhostCursor] →gap', { cursor_x: cursor.x, refLeft: refRect.left, refWidth: refRect.width, left, top })
           lastModeRef.current = 'gap'
         }
       }

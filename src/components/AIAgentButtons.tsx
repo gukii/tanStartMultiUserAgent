@@ -163,54 +163,44 @@ export function AIAgentButtons({
         return
       }
 
-      // Apply all suggestions to the DOM
-      const host = window.location.host
-      const wsProto = host.startsWith('localhost') || host.startsWith('127.') ? 'ws' : 'wss'
-      const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(room)}?userId=ai-agent&name=AI%20Agent&color=%238b5cf6`
-      const ws = new WebSocket(url)
+      // Apply DOM changes immediately — don't wait for WebSocket
+      suggestions.forEach((suggestion: any) => {
+        const schemaField = schema.find(f => f.id === suggestion.fieldId)
+        const element = (
+          schemaField ? scopedQuery(`[data-collab-field-index="${schemaField.elementIndex}"]`) : null
+        ) ?? scopedQuery(`[name="${suggestion.fieldId}"]`) as HTMLInputElement | null
 
-      ws.onopen = () => {
-        suggestions.forEach((suggestion: any) => {
-          // Look up by elementIndex first, fall back to name
-          const schemaField = schema.find(f => f.id === suggestion.fieldId)
-          const element = (
-            schemaField ? scopedQuery(`[data-collab-field-index="${schemaField.elementIndex}"]`) : null
-          ) ?? scopedQuery(`[name="${suggestion.fieldId}"]`) as HTMLInputElement | null
-
-          if (element) {
-            const inputEl = element as HTMLInputElement
-            if (inputEl.type === 'checkbox') {
-              inputEl.checked = suggestion.value === 'on'
-            } else if (inputEl.type === 'radio') {
-              const radioButton = scopedQuery(`[name="${suggestion.fieldId}"][value="${suggestion.value}"]`) as HTMLInputElement | null
-              if (radioButton) {
-                radioButton.checked = true
-              }
-            } else {
-              (element as HTMLInputElement).value = suggestion.value
-            }
-
-            // Trigger change event so React/other listeners know
-            element.dispatchEvent(new Event('input', { bubbles: true }))
-            element.dispatchEvent(new Event('change', { bubbles: true }))
+        if (element) {
+          const inputEl = element as HTMLInputElement
+          if (inputEl.type === 'checkbox') {
+            inputEl.checked = suggestion.value === 'on'
+          } else if (inputEl.type === 'radio') {
+            const radioButton = scopedQuery(`[name="${suggestion.fieldId}"][value="${suggestion.value}"]`) as HTMLInputElement | null
+            if (radioButton) radioButton.checked = true
+          } else {
+            inputEl.value = suggestion.value
           }
-
-          // Send via WebSocket so other peers see it
-          ws.send(JSON.stringify({
-            type: 'UPDATE_FIELD',
-            fieldId: suggestion.fieldId,
-            value: suggestion.value,
-            timestamp: Date.now(),
-          }))
-        })
-
-        setTimeout(() => ws.close(), 300)
-      }
+          element.dispatchEvent(new Event('input', { bubbles: true }))
+          element.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+      })
 
       const checkedCount = suggestions.filter((s: any) => s.value === 'on').length
       setStatus(`✓ ${checkedCount} checkbox${checkedCount !== 1 ? 'es' : ''} checked`)
       setTimeout(() => setStatus(''), 3000)
       setLoading(false)
+
+      // Broadcast to peers via WebSocket (best-effort — fields already filled locally)
+      const host = window.location.host
+      const wsProto = host.startsWith('localhost') || host.startsWith('127.') ? 'ws' : 'wss'
+      const wsUrl = `${wsProto}://${host}/parties/main/${encodeURIComponent(room)}?userId=ai-agent&name=AI%20Agent&color=%238b5cf6`
+      const ws = new WebSocket(wsUrl)
+      ws.onopen = () => {
+        suggestions.forEach((suggestion: any) => {
+          ws.send(JSON.stringify({ type: 'UPDATE_FIELD', fieldId: suggestion.fieldId, value: suggestion.value, timestamp: Date.now() }))
+        })
+        setTimeout(() => ws.close(), 300)
+      }
     } catch (error) {
       console.error('[AIAgentButtons] Error:', error)
       setStatus('Error: Could not fill field')
@@ -312,61 +302,43 @@ export function AIAgentButtons({
         return
       }
 
-      // Connect as AI Agent peer via WebSocket
-      const host = window.location.host
-      const wsProto = host.startsWith('localhost') || host.startsWith('127.')
-        ? 'ws'
-        : 'wss'
-      const url = `${wsProto}://${host}/parties/main/${encodeURIComponent(room)}?userId=ai-agent&name=AI%20Agent&color=%238b5cf6`
-      const ws = new WebSocket(url)
+      // Apply DOM changes immediately — don't wait for WebSocket
+      suggestions.forEach((suggestion: any) => {
+        const schemaField = schema.find(f => f.id === suggestion.fieldId)
+        const element = (
+          schemaField ? scopedQuery(`[data-collab-field-index="${schemaField.elementIndex}"]`) : null
+        ) ?? scopedQuery(`[name="${suggestion.fieldId}"]`) as HTMLInputElement | null
 
-      ws.onopen = () => {
-        suggestions.forEach((suggestion: any, index: number) => {
-          const schemaField = schema.find(f => f.id === suggestion.fieldId)
-          const element = (
-            schemaField ? scopedQuery(`[data-collab-field-index="${schemaField.elementIndex}"]`) : null
-          ) ?? scopedQuery(`[name="${suggestion.fieldId}"]`) as HTMLInputElement | null
-
-          if (element) {
-            const inputEl = element as HTMLInputElement
-            if (inputEl.type === 'checkbox') {
-              inputEl.checked = suggestion.value === 'on'
-            } else if (inputEl.type === 'radio') {
-              const radioButton = scopedQuery(`[name="${suggestion.fieldId}"][value="${suggestion.value}"]`) as HTMLInputElement | null
-              if (radioButton) radioButton.checked = true
-            } else {
-              (element as HTMLInputElement).value = suggestion.value
-            }
-            element.dispatchEvent(new Event('input', { bubbles: true }))
-            element.dispatchEvent(new Event('change', { bubbles: true }))
+        if (element) {
+          const inputEl = element as HTMLInputElement
+          if (inputEl.type === 'checkbox') {
+            inputEl.checked = suggestion.value === 'on'
+          } else if (inputEl.type === 'radio') {
+            const radioButton = scopedQuery(`[name="${suggestion.fieldId}"][value="${suggestion.value}"]`) as HTMLInputElement | null
+            if (radioButton) radioButton.checked = true
+          } else {
+            inputEl.value = suggestion.value
           }
+          element.dispatchEvent(new Event('input', { bubbles: true }))
+          element.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+      })
 
-          ws.send(JSON.stringify({
-            type: 'UPDATE_FIELD',
-            fieldId: suggestion.fieldId,
-            value: suggestion.value,
-            timestamp: Date.now(),
-          }))
+      const verb = mode === 'fill-empty' ? 'filled' : 'fixed'
+      setStatus(`✓ ${suggestions.length} field${suggestions.length > 1 ? 's' : ''} ${verb}`)
+      window.dispatchEvent(new CustomEvent('ai-help-fill-all-complete', { detail: { count: suggestions.length } }))
+      setLoading(false)
+
+      // Broadcast to peers via WebSocket (best-effort — fields already filled locally)
+      const host = window.location.host
+      const wsProto = host.startsWith('localhost') || host.startsWith('127.') ? 'ws' : 'wss'
+      const wsUrl = `${wsProto}://${host}/parties/main/${encodeURIComponent(room)}?userId=ai-agent&name=AI%20Agent&color=%238b5cf6`
+      const ws = new WebSocket(wsUrl)
+      ws.onopen = () => {
+        suggestions.forEach((suggestion: any) => {
+          ws.send(JSON.stringify({ type: 'UPDATE_FIELD', fieldId: suggestion.fieldId, value: suggestion.value, timestamp: Date.now() }))
         })
-
-        setTimeout(() => {
-          ws.close()
-          const verb = mode === 'fill-empty' ? 'filled' : 'fixed'
-          setStatus(`✓ ${suggestions.length} field${suggestions.length > 1 ? 's' : ''} ${verb}`)
-
-          // Dispatch completion event for floating chat status
-          const completeEvent = new CustomEvent('ai-help-fill-all-complete', {
-            detail: { count: suggestions.length }
-          })
-          window.dispatchEvent(completeEvent)
-
-          setLoading(false)
-        }, 500)
-      }
-
-      ws.onerror = () => {
-        setStatus('WebSocket error – is server running?')
-        setLoading(false)
+        setTimeout(() => ws.close(), 300)
       }
     } catch (error) {
       console.error('[AI Agent] Error:', error)
