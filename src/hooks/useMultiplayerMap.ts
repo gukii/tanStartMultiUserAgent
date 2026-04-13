@@ -104,8 +104,6 @@ export function useMultiplayerMap(
   containerRef: RefObject<HTMLElement | null>,
   onSchemaChange?: (schema: FieldSchema[]) => void,
 ): FieldSchema[] {
-  console.log('[useMultiplayerMap] Hook called')
-
   const [pageSchema, setPageSchema] = useState<FieldSchema[]>([])
   const [containerReady, setContainerReady] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -117,27 +115,14 @@ export function useMultiplayerMap(
 
   const scan = useCallback(() => {
     const container = containerRef.current
-    if (!container) {
-      console.log('[useMultiplayerMap] No container ref')
-      return
-    }
+    if (!container) return
 
     const elements = container.querySelectorAll<HTMLElement>(
       'input, textarea, button, select, [contenteditable]',
     )
 
-    console.log('[useMultiplayerMap] Scanning:', {
-      elementsFound: elements.length,
-      containerTag: container.tagName
-    })
-
     const schema: FieldSchema[] = []
     elements.forEach((el, i) => schema.push(extractSchema(el, i)))
-
-    console.log('[useMultiplayerMap] Schema extracted:', {
-      count: schema.length,
-      fields: schema.map(f => ({ id: f.id, type: f.type, label: f.label }))
-    })
 
     setPageSchema(schema)
     onSchemaChangeRef.current?.(schema)
@@ -146,15 +131,12 @@ export function useMultiplayerMap(
   // Poll for container to become available
   useEffect(() => {
     if (containerRef.current) {
-      console.log('[useMultiplayerMap] Container already available')
       setContainerReady(true)
       return
     }
 
-    console.log('[useMultiplayerMap] Container not ready, polling...')
     const pollInterval = setInterval(() => {
       if (containerRef.current) {
-        console.log('[useMultiplayerMap] Container now available')
         setContainerReady(true)
         clearInterval(pollInterval)
       }
@@ -167,18 +149,11 @@ export function useMultiplayerMap(
 
   // Set up observer once container is ready
   useEffect(() => {
-    if (!containerReady) {
-      console.log('[useMultiplayerMap] Waiting for container...')
-      return
-    }
+    if (!containerReady) return
 
     const container = containerRef.current
-    if (!container) {
-      console.log('[useMultiplayerMap] Container became unavailable')
-      return
-    }
+    if (!container) return
 
-    console.log('[useMultiplayerMap] Setting up observer on:', container.tagName)
 
     // Initial pass
     scan()
@@ -206,7 +181,6 @@ export function useMultiplayerMap(
     observerRef.current = observer
 
     return () => {
-      console.log('[useMultiplayerMap] Cleanup: disconnecting observer')
       observer.disconnect()
       if (debounceRef.current !== null) clearTimeout(debounceRef.current)
     }

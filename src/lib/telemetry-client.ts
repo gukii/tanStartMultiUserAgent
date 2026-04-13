@@ -97,14 +97,9 @@ export function useTelemetryBuffer(options: TelemetryClientOptions): TelemetryCl
       sampleRate,
       onFlush: (events, sequenceId) => {
         const socket = socketRef.current;
-        console.log('[Telemetry] Flush callback - socket:', socket, 'readyState:', socket?.readyState);
-
         if (!socket || socket.readyState !== WebSocket.OPEN) {
-          console.warn('[Telemetry] WebSocket not ready, events will be lost. Socket:', socket, 'readyState:', socket?.readyState);
           return;
         }
-
-        console.log('[Telemetry] Sending batch to server:', events.length, 'events');
 
         // Send batch to server
         socket.send(
@@ -145,7 +140,6 @@ export function useTelemetryBuffer(options: TelemetryClientOptions): TelemetryCl
         data,
       };
 
-      console.log('[Telemetry] Capturing event:', eventType, data);
       bufferRef.current.capture(event);
     },
     [enabled]

@@ -440,16 +440,8 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
           const body = (await request.json()) as SuggestionRequest
           const { fields, currentValues, mode, route = '/' } = body
 
-          console.log('[API] ai-suggest-fields request:', {
-            mode,
-            route,
-            fieldCount: fields.length,
-            fields: fields.map(f => ({ id: f.id, type: f.type, label: f.label }))
-          })
-
           // Load form context (LLM-generated mappings)
           const formContext = await loadFormContext()
-          console.log('[API] Form context routes:', formContext ? Object.keys(formContext.routes) : 'none')
 
           const suggestions: FieldSuggestion[] = []
 
@@ -462,37 +454,22 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
             // IMPORTANT: Only use currentValues (live state), NOT field.currentValue (stale snapshot)
             const currentValue = currentValues[field.id] || ''
 
-            console.log('[API] Processing field:', {
-              id: field.id,
-              name: field.name,
-              type: field.type,
-              label: field.label,
-              currentValueFromProps: currentValues[field.id],
-              finalCurrentValue: currentValue,
-              willSkip: mode === 'fill-empty' && currentValue
-            })
-
             // Mode: single-field - always process (used when user clicks ✨ on a specific field)
             // This allows re-evaluation of checkboxes/radios even if already checked
             if (mode === 'single-field') {
-              console.log('[API] Single-field mode: always processing:', field.id)
               // Don't skip, process this field regardless of current value
             }
             // Mode: fill-empty - only fill empty fields
             // For checkboxes, empty means unchecked (value === '')
             // For radio, empty means no selection (value === '')
             else if (mode === 'fill-empty' && currentValue) {
-              console.log('[API] Skipping field (already has value):', field.id)
               continue
             }
             // Mode: complete - validate and fix existing values, fill empty
             else if (mode === 'complete' && currentValue) {
               const isValid = validateFieldValue(field, currentValue)
               if (isValid) {
-                console.log('[API] Skipping field (value is valid):', field.id, currentValue)
                 continue
-              } else {
-                console.log('[API] Field has invalid value, will fix:', field.id, currentValue)
               }
             }
 
@@ -510,23 +487,7 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
               const intent = inferFieldIntent(field)
               value = generateValue(intent, field, mode, currentValue)
               reasoning = `Inferred as "${intent}" from field clues (no form context)`
-
-              // Detailed logging for debugging
-              console.log('[API] Field inference:', {
-                id: field.id,
-                name: field.name,
-                type: field.type,
-                label: field.label,
-                aiIntent: field.aiIntent,
-                inferredIntent: intent,
-                currentValue,
-                generatedValue: value,
-                valueType: typeof value,
-                mode
-              })
             }
-
-            console.log('[API] Generated suggestion:', { fieldId: field.id, value, reasoning, valueType: typeof value })
 
             suggestions.push({
               fieldId: field.id,
@@ -534,11 +495,6 @@ export const Route = createFileRoute('/api/ai-suggest-fields')({
               reasoning,
             })
           }
-
-          console.log('[API] Returning suggestions:', {
-            count: suggestions.length,
-            suggestions: suggestions.map(s => ({ fieldId: s.fieldId, value: s.value.slice(0, 20) }))
-          })
 
           return json({ suggestions })
         } catch (error) {

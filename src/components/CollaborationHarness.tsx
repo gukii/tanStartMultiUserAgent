@@ -889,20 +889,10 @@ export function CollaborationHarness({
 
     // Build WebSocket URL for self-hosted server
     // Uses /parties/main/:roomId path
-    console.log('[DEBUG] window.location.href:', window.location.href)
-    console.log('[DEBUG] window.location.host:', window.location.host)
-    console.log('[DEBUG] window.location.hostname:', window.location.hostname)
-    console.log('[DEBUG] window.location.port:', window.location.port)
-    console.log('[DEBUG] partyKitHost:', partyKitHost)
-    console.log('[DEBUG] VITE_PARTYKIT_HOST:', import.meta.env.VITE_PARTYKIT_HOST)
-
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = partyKitHost ?? (import.meta.env.VITE_PARTYKIT_HOST as string | undefined) ?? window.location.host
     const queryString = new URLSearchParams({ userId, name, color }).toString()
     const wsUrl = `${wsProtocol}//${host}/parties/main/${resolvedRoomId}?${queryString}`
-
-    console.log('[CollaborationHarness] Final host:', host)
-    console.log('[CollaborationHarness] Connecting to:', wsUrl)
 
     // Calculate delay for this connection attempt
     const delay = reconnectAttempts.current > 0
@@ -1143,7 +1133,6 @@ export function CollaborationHarness({
         if (now - lastSent < CURSOR_THROTTLE_MS) return
         lastSent = now
 
-        console.log('[TOUCH] Broadcasting cursor position:', touch.clientX, touch.clientY)
         broadcastCursor(touch.clientX, touch.clientY)
       } else {
         // Hide visual cursor during two-finger scroll
@@ -1154,8 +1143,6 @@ export function CollaborationHarness({
 
     function onTouchStart(e: TouchEvent) {
       if (!touchCursorMode) return
-
-      console.log('[TOUCH] Touch started, mode:', touchCursorMode)
 
       if (e.touches.length === 1) {
         const touch = e.touches[0]
@@ -1408,9 +1395,6 @@ export function CollaborationHarness({
       const form = e.target as HTMLFormElement
       if (!form || !container.contains(form)) return
 
-      console.log('[Harness] Form submission detected, capturing snapshot')
-      console.log('[Harness] Form validity:', form.checkValidity())
-
       // Capture snapshot of who last edited each field
       submissionCycleActive = true
       submissionSnapshot = {}
@@ -1546,10 +1530,7 @@ export function CollaborationHarness({
 
     // Observe DOM changes to detect server validation errors
     const observer = new MutationObserver((mutations) => {
-      console.log('[Harness] MutationObserver fired, mutations:', mutations.length, 'submissionCycleActive:', submissionCycleActive)
-
       if (!submissionCycleActive) {
-        console.log('[Harness] Ignoring mutations - submission cycle not active')
         return
       }
 
@@ -1557,11 +1538,8 @@ export function CollaborationHarness({
       mutationCount += mutations.length
       lastMutationTime = Date.now()
 
-      console.log('[Harness] Processing mutations during active submission cycle')
-
       // Check for route change (likely successful submission)
       if (window.location.pathname !== currentRoute) {
-        console.log('[Harness] Route changed - likely successful submission')
 
         // Track fixes - if fields previously had errors and submission succeeded, someone fixed them
         if (previouslyErroredFields.size > 0) {
@@ -1582,7 +1560,6 @@ export function CollaborationHarness({
 
       // Look for error indicators appearing after submission
       const errorFields = new Set<string>()
-      console.log('[Harness] Checking mutations for error indicators...')
 
       mutations.forEach((mutation) => {
         // Strategy 1: Check for aria-invalid attribute changes (explicit)
@@ -1592,11 +1569,9 @@ export function CollaborationHarness({
               target instanceof HTMLTextAreaElement ||
               target instanceof HTMLSelectElement) {
             const isInvalid = target.getAttribute('aria-invalid') === 'true'
-            console.log('[Harness] aria-invalid detected:', target.getAttribute('name') || target.id, '=', isInvalid)
             if (isInvalid) {
               const fieldId = target.getAttribute('name') || target.id
               if (fieldId) {
-                console.log('[Harness] Adding field to error list:', fieldId)
                 errorFields.add(fieldId)
               }
             }
@@ -1704,14 +1679,11 @@ export function CollaborationHarness({
 
     // Track field fixes - called when submission succeeds after previous errors
     function trackFieldFixes() {
-      console.log('[Harness] Tracking fixes for previously errored fields:', Array.from(previouslyErroredFields))
-
       previouslyErroredFields.forEach((fieldId) => {
         const snapshot = submissionSnapshot[fieldId]
         if (!snapshot) return
 
         // Send telemetry - attribute fix to user who last edited this field
-        console.log('[Harness] Field fixed:', fieldId, 'by', snapshot.userName)
         send({
           type: 'VALIDATION_STATUS',
           fieldId,
@@ -1723,8 +1695,6 @@ export function CollaborationHarness({
 
     // Process detected errors (either from pattern matching or snapshot diff)
     function processDetectedErrors(errorFieldIds: Set<string>) {
-      console.log('[Harness] processDetectedErrors called with fields:', Array.from(errorFieldIds))
-
       // Clear timeout since we found errors
       if (submissionTimeout) {
         clearTimeout(submissionTimeout)
@@ -1757,7 +1727,6 @@ export function CollaborationHarness({
         })
 
         // Send telemetry - attribute error to user who last edited this field
-        console.log('[Harness] Field broken:', fieldId, 'by', snapshot.userName)
         send({
           type: 'VALIDATION_STATUS',
           fieldId,
@@ -1768,7 +1737,6 @@ export function CollaborationHarness({
 
       // Show summary notification below submit button
       if (errors.length > 0) {
-        console.log('[Harness] Detected errors:', errors)
         setValidationErrors(errors)
         const form = container.querySelector('form')
         const anchor = findValidationAnchor(form, validationAnchor)
@@ -1791,7 +1759,6 @@ export function CollaborationHarness({
     function compareSnapshotsAndDetectErrors() {
       if (!preSubmitSnapshot) return
 
-      console.log('[Harness] Comparing DOM snapshots to detect changes')
       const errorFieldIds = new Set<string>()
 
       const form = container.querySelector('form')
@@ -1821,7 +1788,6 @@ export function CollaborationHarness({
                         isRedish(postState.styling.backgroundColor)
 
         if (!preRed && postRed) {
-          console.log('[Harness] Field turned red:', fieldId)
           errorFieldIds.add(fieldId)
           significantChanges = true
         }
@@ -1832,7 +1798,6 @@ export function CollaborationHarness({
         const errorMessages = newText.filter(text => looksLikeError(text))
 
         if (errorMessages.length > 0) {
-          console.log('[Harness] Error message appeared near field (within form):', fieldId, errorMessages)
           errorFieldIds.add(fieldId)
           significantChanges = true
         }
@@ -1843,10 +1808,6 @@ export function CollaborationHarness({
       if (errorFieldIds.size > 0 && significantChanges) {
         processDetectedErrors(errorFieldIds)
       } else {
-        if (!significantChanges) {
-          console.log('[Harness] No significant error indicators detected - assuming successful submission')
-        }
-
         // Track fixes - if fields previously had errors and this submission succeeded, someone fixed them
         if (previouslyErroredFields.size > 0) {
           trackFieldFixes()
@@ -1872,7 +1833,6 @@ export function CollaborationHarness({
     // This prevents detecting harness UI changes (validation errors, ready states, etc.)
     const form = container.querySelector('form')
     if (form) {
-      console.log('[Harness] Starting MutationObserver on form element')
       observer.observe(form, {
         attributes: true,
         attributeFilter: ['aria-invalid', 'class', 'style'],
@@ -1971,15 +1931,12 @@ export function CollaborationHarness({
         // This is a double-click on the same field
         const lockOwnerId = fieldLocks[fieldId]
         if (lockOwnerId && lockOwnerId !== userId) {
-          console.log('[FORCE LOCK] Double-click detected on locked field:', fieldId, 'current owner:', lockOwnerId)
-
           // Check when the current owner was last active
           const lastActivity = fieldActivityTimestamps.current[fieldId] || 0
           const timeSinceActivity = now - lastActivity
 
           if (timeSinceActivity < INACTIVITY_THRESHOLD_MS) {
             // Owner is still active - prevent eviction
-            console.log('[FORCE LOCK] Eviction blocked - owner active within', timeSinceActivity, 'ms')
 
             // Prevent default to avoid text selection
             e.preventDefault()
@@ -1994,8 +1951,6 @@ export function CollaborationHarness({
             lastClickedFieldId = null
             return
           }
-
-          console.log('[FORCE LOCK] Evicting inactive owner (inactive for', timeSinceActivity, 'ms)')
 
           // Prevent default to avoid text selection
           e.preventDefault()

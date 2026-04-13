@@ -230,16 +230,10 @@ class Room {
 
     // Skip if no actual change
     if (buffer.initialValue === buffer.currentValue) {
-      console.log(`[Room ${this.roomId}] Skipping empty buffer flush for ${buffer.fieldId} by ${buffer.userName}`)
       return
     }
 
     const durationMs = buffer.lastUpdateTimestamp - buffer.startTimestamp
-
-    console.log(
-      `[Room ${this.roomId}] Flushing buffer for ${buffer.fieldId} by ${buffer.userName} (${reason}): ` +
-      `${buffer.keystrokeCount} keystrokes, ${durationMs}ms, "${buffer.initialValue}" -> "${buffer.currentValue}"`
-    )
 
     // Ensure submission cycle exists
     if (!this.currentSubmissionCycleId) {
@@ -384,8 +378,6 @@ class Room {
     const cycleId = `cycle_${this.roomId}_${Date.now()}`
     this.currentSubmissionCycleId = cycleId
 
-    console.log(`[Room ${this.roomId}] Started new submission cycle: ${cycleId}`)
-
     setImmediate(async () => {
       try {
         await telemetryHandler.startSubmissionCycle(this.roomId, cycleId)
@@ -411,12 +403,6 @@ class Room {
     for (const key of allBufferKeys) {
       await this.flushBuffer(key, 'form_submission')
     }
-
-    console.log(
-      `[Room ${this.roomId}] Ending submission cycle: ${this.currentSubmissionCycleId} by ${submittedByName} ` +
-      `(${fieldsWithErrors.size} fields with errors at submission, ` +
-      `${fieldsWithErrorsInCycle.size} fields had errors during cycle)`
-    )
 
     // Collect final field values at submission time
     const finalFieldValues = new Map<string, string>()
@@ -640,18 +626,14 @@ class Room {
         this.fieldValues.clear()
         this.drafts.clear()
         this.readyStates.clear()
-        console.log(`[Room ${this.roomId}] Form cleared by ${userId}`)
         // Broadcast to ALL clients (including the one who initiated)
         this.broadcast({ type: 'FORM_CLEARED' })
         break
       case 'SERVER_VALIDATION_ERRORS':
         // A client received server validation errors - broadcast to all peers
-        console.log(`[Room ${this.roomId}] Broadcasting server validation errors from ${userId}`)
-
         // Track server validation errors in validationErrors map for telemetry
         // This ensures they're included when calculating which fields have errors at submission
         if (msg.errors && msg.errors.length > 0) {
-          console.log(`[Room ${this.roomId}] Tracking ${msg.errors.length} server validation errors`)
           for (const error of msg.errors) {
             if (error.field && error.field !== '_form') {
               this.validationErrors.set(error.field, {
@@ -661,7 +643,6 @@ class Room {
               })
               // Track that this field had an error in this cycle (for fix detection)
               this.fieldsWithErrorsInCurrentCycle.add(error.field)
-              console.log(`[Room ${this.roomId}] Tracked server error for field ${error.field}: ${error.message}`)
 
               // Note: We don't mark the error immediately here because the action sequences
               // haven't been flushed from edit buffers yet. endSubmissionCycle will mark errors
@@ -685,11 +666,6 @@ class Room {
 
         // Copy fieldsWithErrorsInCurrentCycle for telemetry (tracks all fields that had errors during cycle)
         const fieldsWithErrorsInCycle = new Set(this.fieldsWithErrorsInCurrentCycle)
-
-        console.log(
-          `[Room ${this.roomId}] Form submitted: ${fieldsWithErrorsSet.size} current errors, ` +
-          `${fieldsWithErrorsInCycle.size} fields had errors in cycle`
-        )
 
         // End current submission cycle with metrics (async, non-blocking)
         const user = this.users.get(userId)
@@ -725,7 +701,6 @@ class Room {
       }
 
       case 'TELEMETRY_BATCH': {
-        console.log(`[Server] Received TELEMETRY_BATCH from ${userId}: ${msg.events.length} events, sequence ${msg.sequenceId}`);
 
         // Non-blocking telemetry ingestion (async via setImmediate)
         setImmediate(async () => {
@@ -978,9 +953,6 @@ setInterval(() => roomManager.removeEmptyRooms(), 60000)
 
 async function start() {
   try {
-    console.log(`[DEBUG] IS_PRODUCTION = ${IS_PRODUCTION}`)
-    console.log(`[DEBUG] NODE_ENV = ${process.env.NODE_ENV}`)
-
     // Initialize telemetry database (create directory and run migrations)
     console.log(`[Startup] Initializing telemetry database...`)
     await initDatabase()
@@ -1024,13 +996,11 @@ async function start() {
 
       // Only handle WebSocket upgrades for /parties/main/:roomId paths
       if (pathname && pathname.match(/^\/parties\/main\/.+$/)) {
-        console.log(`[WebSocket] ✓ Collaboration WebSocket: ${pathname}`)
         wss.handleUpgrade(request, socket, head, (ws) => {
           wss.emit('connection', ws, request)
         })
       } else {
         // For other WebSocket connections (e.g., Vite HMR), forward to proxy
-        console.log(`[WebSocket] → Forwarding to proxy (Vite HMR): ${pathname}`)
         if (proxyMiddleware && proxyMiddleware.upgrade) {
           proxyMiddleware.upgrade(request, socket, head)
         } else {
