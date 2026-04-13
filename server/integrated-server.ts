@@ -1067,6 +1067,16 @@ async function start() {
   }
 }
 
+// Prevent unhandled rejections/exceptions from crashing the process.
+// A single bad SSR request or async error should never take down the server.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process] Unhandled rejection (kept alive):', reason)
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('[Process] Uncaught exception (kept alive):', error)
+})
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('[Shutdown] Received SIGTERM, closing servers...')

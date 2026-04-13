@@ -10,7 +10,7 @@ cmds = ["pnpm install --frozen-lockfile"]
 [phases.build]
 cmds = [
   # Set dummy database path for build phase (persistent volume not available yet)
-  "TELEMETRY_DB_URL=file:/tmp/build-dummy.db pnpm build"
+  "TELEMETRY_DB_URL=file:/tmp/build-dummy.db VITE_ENABLE_AI_AGENT=true pnpm build"
 ]
 
 [start]
