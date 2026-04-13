@@ -812,49 +812,96 @@ class RoomManager {
 
 let tanstackProcess: ChildProcess | null = null
 
-function startTanStackServer(): Promise<void> {
+async function startTanStackServer(): Promise<void> {
+  if (IS_PRODUCTION) {
+    // In production, import the TanStack Start SSR fetch handler built by `vite build`
+    // and wrap it in a Node.js HTTP server on TANSTACK_PORT.
+    // This runs SSR, server functions, and API routes correctly — vite preview would
+    // only serve static files and break all of those.
+    console.log('[TanStack] Loading production SSR handler from dist/server/server.js...')
+
+    const { default: serverEntry } = await import('../dist/server/server.js' as any)
+    const { createServer: createHttpServer } = await import('http')
+
+    const tanstackHttpServer = createHttpServer(async (req, res) => {
+      try {
+        const host = req.headers.host ?? `127.0.0.1:${TANSTACK_PORT}`
+        const url = `http://${host}${req.url ?? '/'}`
+
+        // Read request body
+        const chunks: Buffer[] = []
+        for await (const chunk of req) chunks.push(chunk as Buffer)
+        const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined
+
+        // Convert to Web Fetch Request
+        const request = new Request(url, {
+          method: req.method ?? 'GET',
+          headers: new Headers(req.headers as Record<string, string>),
+          body: body?.length ? body : undefined,
+          // @ts-ignore — duplex is required for streaming bodies in Node 18+
+          duplex: 'half',
+        })
+
+        // Call TanStack Start SSR handler
+        const response: Response = await serverEntry.fetch(request)
+
+        // Convert Web Response back to Node.js ServerResponse
+        res.statusCode = response.status
+        response.headers.forEach((value: string, key: string) => res.setHeader(key, value))
+        const buffer = await response.arrayBuffer()
+        res.end(Buffer.from(buffer))
+      } catch (error) {
+        console.error('[TanStack SSR] Request error:', error)
+        if (!res.headersSent) {
+          res.statusCode = 500
+          res.end('Internal Server Error')
+        }
+      }
+    })
+
+    return new Promise((resolve, reject) => {
+      tanstackHttpServer.listen(TANSTACK_PORT, '127.0.0.1', () => {
+        console.log(`[TanStack] SSR server running on http://127.0.0.1:${TANSTACK_PORT}`)
+        resolve()
+      })
+      tanstackHttpServer.on('error', reject)
+    })
+  }
+
+  // Development: spawn vite dev server
   return new Promise((resolve, reject) => {
-    console.log('[TanStack] Starting server...')
+    console.log('[TanStack] Starting dev server...')
 
     const env = {
       ...process.env,
       PORT: TANSTACK_PORT.toString(),
-      HOST: '127.0.0.1', // Internal only
+      HOST: '127.0.0.1',
     }
 
-    // In production, use vite preview to serve the built app
-    // In development, run the dev server
-    // Always bind to 127.0.0.1 (IPv4) to ensure proxy can connect
-    const command = 'pnpm'
-    const args = IS_PRODUCTION
-      ? ['vite', 'preview', '--port', TANSTACK_PORT.toString(), '--host', '127.0.0.1']
-      : ['vite', 'dev', '--port', TANSTACK_PORT.toString(), '--host', '127.0.0.1']
-
-    tanstackProcess = spawn(command, args, {
+    tanstackProcess = spawn('pnpm', ['vite', 'dev', '--port', TANSTACK_PORT.toString(), '--host', '127.0.0.1'], {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
-    tanstackProcess.stdout?.on('data', (data) => {
+    tanstackProcess.stdout?.on('data', (data: Buffer) => {
       console.log(`[TanStack] ${data.toString().trim()}`)
     })
 
-    tanstackProcess.stderr?.on('data', (data) => {
+    tanstackProcess.stderr?.on('data', (data: Buffer) => {
       console.error(`[TanStack] ${data.toString().trim()}`)
     })
 
-    tanstackProcess.on('error', (error) => {
+    tanstackProcess.on('error', (error: Error) => {
       console.error('[TanStack] Process error:', error)
       reject(error)
     })
 
-    tanstackProcess.on('exit', (code) => {
+    tanstackProcess.on('exit', (code: number) => {
       console.log(`[TanStack] Process exited with code ${code}`)
     })
 
-    // Wait a bit for the server to start
     setTimeout(() => {
-      console.log(`[TanStack] Server should be running on http://127.0.0.1:${TANSTACK_PORT}`)
+      console.log(`[TanStack] Dev server should be running on http://127.0.0.1:${TANSTACK_PORT}`)
       resolve()
     }, 3000)
   })
