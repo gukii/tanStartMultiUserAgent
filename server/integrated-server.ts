@@ -990,32 +990,26 @@ async function start() {
     console.log(`[Startup] Starting TanStack Start server...`)
     await startTanStackServer()
 
+    // In production, serve built client assets directly before proxying.
+    // The SSR handler (dist/server/server.js) handles HTML/API but does not
+    // serve static files — express.static must cover dist/client/assets.
+    if (IS_PRODUCTION) {
+      const path = await import('path')
+      const clientDir = path.join(process.cwd(), 'dist', 'client')
+      console.log(`[Startup] Serving static assets from ${clientDir}`)
+      app.use(express.static(clientDir, { maxAge: '1y', immutable: true }))
+    }
+
     const proxy = createProxyMiddleware({
         target: `http://127.0.0.1:${TANSTACK_PORT}`,
         changeOrigin: true,
-        ws: false, // Disable automatic WebSocket proxying - we handle it manually in server.on('upgrade')
-        filter: (pathname) => {
-          const shouldProxy = pathname !== '/health'
-          console.log(`[Proxy Filter] ${pathname} -> ${shouldProxy ? 'PROXY' : 'SKIP'}`)
-          return shouldProxy
-        },
+        ws: false,
+        filter: (pathname) => pathname !== '/health',
         onError: (err, req, res) => {
-          console.error('[Proxy ERROR]', {
-            message: err.message,
-            code: (err as any).code,
-            url: req.url,
-            method: req.method,
-          })
+          console.error('[Proxy ERROR]', err.message, req.url)
           if (!res.headersSent) {
             res.status(502).json({ error: 'TanStack server not available' })
           }
-        },
-        onProxyReq: (proxyReq, req) => {
-          console.log(`[Proxy REQ] ${req.method} ${req.url} -> http://127.0.0.1:${TANSTACK_PORT}${req.url}`)
-          console.log(`[Proxy REQ] Headers:`, req.headers)
-        },
-        onProxyRes: (proxyRes, req, res) => {
-          console.log(`[Proxy RES] ${req.method} ${req.url} <- Status: ${proxyRes.statusCode}`)
         },
       })
 
