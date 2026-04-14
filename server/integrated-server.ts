@@ -680,7 +680,7 @@ class Room {
         this.fieldsWithErrorsInCurrentCycle.clear()
 
         // Broadcast to all other peers that form was submitted
-        this.broadcast({ type: 'FORM_SUBMITTED', userId })
+        this.broadcast({ type: 'FORM_SUBMITTED', userId, orderId: (msg as any).orderId })
         // Clear ready states after submission
         this.readyStates.clear()
         break

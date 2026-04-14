@@ -146,7 +146,7 @@ export type ClientMessage =
   | { type: 'UNMARK_READY' }
   | { type: 'CLEAR_ALL_READY' }
   | { type: 'SET_SUBMIT_MODE'; mode: 'any' | 'consensus' }
-  | { type: 'FORM_SUBMITTED' } // Notify all peers that form was submitted
+  | { type: 'FORM_SUBMITTED'; orderId?: string } // Notify all peers that form was submitted
   | { type: 'CLEAR_FORM' } // Clear all field values, drafts, and ready states
   | { type: 'VALIDATION_STATUS'; fieldId: string; hasError: boolean; errorMessage?: string } // Notify server of validation state
   | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number } // Telemetry data batch
@@ -168,7 +168,7 @@ export type ServerMessage =
   | { type: 'DRAFT_REJECTED'; fieldId: string; userId: string }
   | { type: 'READY_STATE_CHANGE'; userId: string; isReady: boolean }
   | { type: 'SUBMIT_MODE_CHANGE'; mode: 'any' | 'consensus' }
-  | { type: 'FORM_SUBMITTED'; userId: string } // Broadcast form submission to all peers
+  | { type: 'FORM_SUBMITTED'; userId: string; orderId?: string } // Broadcast form submission to all peers
   | { type: 'FORM_CLEARED' } // Broadcast form clear to all peers
   | { type: 'TELEMETRY_ACK'; sequenceId: number; status: 'success' | 'error'; error?: string } // Telemetry acknowledgment
 
@@ -207,7 +207,7 @@ export interface CollaborationHarnessProps {
   /** Called whenever the MutationObserver rebuilds the page schema. */
   onSchemaUpdate?: (schema: FieldSchema[]) => void
   /** Called when any peer submits the form (in consensus mode). */
-  onFormSubmit?: (submittedByUserId: string) => void
+  onFormSubmit?: (submittedByUserId: string, orderId?: string) => void
   /** Called when any peer clears the form. */
   onFormClear?: () => void
   /** Called when any peer changes the submit mode. */

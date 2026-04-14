@@ -37,16 +37,19 @@ function CheckoutForm({
   onReset,
   submittedBy,
   setSubmittedBy,
+  orderId,
 }: {
   submitted: boolean;
   setSubmitted: (submitted: boolean) => void;
   onReset: () => void;
   submittedBy: string | null;
   setSubmittedBy: (userId: string | null) => void;
+  orderId: string | null;
 }) {
   const [mounted, setMounted] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
   const {
     unmarkReady,
     clearForm,
@@ -71,55 +74,94 @@ function CheckoutForm({
     setMounted(true);
   }, []);
 
-  function resetForm() {
-    // First, show the form (switch from success message to form)
-    onReset();
-    setSubmittedBy(null);
-    unmarkReady();
-
-    // Then, after form is mounted, clear all fields
-    setTimeout(() => {
-      clearForm();
-    }, 50);
-  }
+  // Show toast when submitted, then auto-dismiss and reset
+  useEffect(() => {
+    if (!submitted) {
+      setToastVisible(false);
+      return;
+    }
+    setToastVisible(true);
+    const fadeTimer = setTimeout(() => setToastVisible(false), 4000);
+    const resetTimer = setTimeout(() => {
+      onReset();
+      setSubmittedBy(null);
+      unmarkReady();
+      setTimeout(() => clearForm(), 50);
+    }, 5000);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(resetTimer);
+    };
+  }, [submitted]);
 
   if (!mounted) {
     return <div className="h-96" />; // Placeholder during SSR
   }
 
-  if (submitted) {
-    const submittedByUser = submittedBy ? users[submittedBy] : null;
-    const submitterName =
-      submittedByUser?.name || (submittedBy === userId ? "You" : "Someone");
-
-    return (
-      <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center sm:p-8">
-        <div className="mb-2 text-4xl">✅</div>
-        <h2 className="text-lg font-semibold text-green-800 sm:text-xl">
-          Order placed!
-        </h2>
-        {submittedBy && (
-          <p className="mt-2 text-sm text-green-700">
-            Submitted by: {submittedBy === userId ? "You" : submitterName}
-          </p>
-        )}
-        <p className="mt-2 text-sm text-green-700">
-          📊 Telemetry data captured. Check:{" "}
-          <code className="rounded bg-green-100 px-1 py-0.5 text-xs">
-            node scripts/verify-telemetry-db.js
-          </code>
-        </p>
-        <button
-          className="mt-3 text-sm text-green-700 underline sm:mt-4"
-          onClick={resetForm}
-        >
-          Reset form
-        </button>
-      </div>
-    );
-  }
+  const submittedByUser = submittedBy ? users[submittedBy] : null;
+  const submitterName =
+    submittedByUser?.name || (submittedBy === userId ? "You" : "Someone");
+  const byMe = submittedBy === userId;
 
   return (
+    <>
+      {/* Success toast — fixed overlay, auto-dismisses */}
+      {submitted && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9998,
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            paddingTop: 32,
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              pointerEvents: "auto",
+              background: "#fff",
+              border: "1.5px solid #22c55e",
+              borderRadius: 16,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+              padding: "20px 28px",
+              minWidth: 280,
+              maxWidth: 380,
+              textAlign: "center",
+              opacity: toastVisible ? 1 : 0,
+              transform: toastVisible ? "translateY(0)" : "translateY(-12px)",
+              transition: "opacity 500ms ease, transform 500ms ease",
+            }}
+          >
+            <div style={{ fontSize: 36, marginBottom: 8 }}>✅</div>
+            <div style={{ fontWeight: 700, fontSize: 17, color: "#166534" }}>
+              Order placed!
+            </div>
+            {submittedBy && (
+              <div style={{ marginTop: 4, fontSize: 13, color: "#15803d" }}>
+                {byMe ? "Submitted by you" : `Submitted by ${submitterName}`}
+              </div>
+            )}
+            {orderId && (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: "#6b7280",
+                  fontFamily: "monospace",
+                }}
+              >
+                #{orderId}
+              </div>
+            )}
+            <div style={{ marginTop: 10, fontSize: 12, color: "#9ca3af" }}>
+              Form will reset shortly…
+            </div>
+          </div>
+        </div>
+      )}
     <form
       key={formKey}
       className="grid gap-4 sm:gap-6"
@@ -168,13 +210,9 @@ function CheckoutForm({
           if (result.success) {
             // Success - clear any previous errors and proceed with submission
             broadcastServerErrors([]); // Clear errors for all peers
-            sendFormSubmit();
+            sendFormSubmit(result.orderId);
             setSubmitted(true);
             setSubmittedBy(userId);
-            console.log(
-              "[CheckoutForm] Order placed successfully:",
-              result.orderId,
-            );
           } else {
             // Server validation failed
             console.log(
@@ -509,6 +547,7 @@ function CheckoutForm({
 
       <SubmitControl submitText="Place order" />
     </form>
+    </>
   );
 }
 
@@ -809,12 +848,14 @@ function DemoTelemetryPage() {
   const [submitMode, setSubmitMode] = useState<"any" | "consensus">("consensus");
   const [submitted, setSubmitted] = useState(false);
   const [submittedBy, setSubmittedBy] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
   const hasResetRef = useRef(false);
 
   const handleReset = useCallback(() => {
     hasResetRef.current = true;
     setSubmitted(false);
     setSubmittedBy(null);
+    setOrderId(null);
   }, []);
 
   return (
@@ -822,15 +863,17 @@ function DemoTelemetryPage() {
       roomId={roomId}
       partyKitHost={partyKitHost}
       submitMode={submitMode}
-      onFormSubmit={(submittedByUserId) => {
+      onFormSubmit={(submittedByUserId, submittedOrderId) => {
         if (!hasResetRef.current) {
           setSubmitted(true);
           setSubmittedBy(submittedByUserId);
+          setOrderId(submittedOrderId || null);
         }
       }}
       onFormClear={() => {
         setSubmitted(false);
         setSubmittedBy(null);
+        setOrderId(null);
         hasResetRef.current = false;
       }}
       onSubmitModeChange={(mode) => setSubmitMode(mode)}
@@ -851,6 +894,7 @@ function DemoTelemetryPage() {
         setSubmitted={setSubmitted}
         submittedBy={submittedBy}
         setSubmittedBy={setSubmittedBy}
+        orderId={orderId}
         onReset={handleReset}
       />
     </CollaborationHarnessWithTelemetry>
@@ -866,6 +910,7 @@ function DemoPageContent({
   setSubmitted,
   submittedBy,
   setSubmittedBy,
+  orderId,
   onReset,
 }: {
   submitMode: "any" | "consensus";
@@ -876,6 +921,7 @@ function DemoPageContent({
   setSubmitted: (submitted: boolean) => void;
   submittedBy: string | null;
   setSubmittedBy: (userId: string | null) => void;
+  orderId: string | null;
   onReset: () => void;
 }) {
   return (
@@ -900,6 +946,7 @@ function DemoPageContent({
           setSubmitted={setSubmitted}
           submittedBy={submittedBy}
           setSubmittedBy={setSubmittedBy}
+          orderId={orderId}
           onReset={onReset}
         />
       </div>

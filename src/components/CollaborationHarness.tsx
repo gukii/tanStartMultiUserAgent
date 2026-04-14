@@ -339,7 +339,7 @@ interface CollaborationContextValue {
   setCursorMessage: (message: string) => void
   touchCursorMode: boolean
   setTouchCursorMode: (enabled: boolean) => void
-  sendFormSubmit: () => void
+  sendFormSubmit: (orderId?: string) => void
   clearForm: () => void
   broadcastServerErrors: (errors: Array<{ field: string; message: string }>) => void
 }
@@ -796,7 +796,7 @@ export function CollaborationHarness({
 
         case 'FORM_SUBMITTED': {
           // Another peer submitted the form - notify parent component
-          onFormSubmit?.(msg.userId)
+          onFormSubmit?.(msg.userId, msg.orderId)
           break
         }
 
@@ -2419,8 +2419,8 @@ export function CollaborationHarness({
     }
   }, [send])
 
-  const sendFormSubmit = useCallback(() => {
-    send({ type: 'FORM_SUBMITTED' })
+  const sendFormSubmit = useCallback((orderId?: string) => {
+    send({ type: 'FORM_SUBMITTED', orderId })
   }, [send])
 
   const clearForm = useCallback(() => {
