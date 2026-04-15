@@ -950,6 +950,8 @@ export function CollaborationHarness({
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: 'PING' }))
         }
+        // HTTP heartbeat keeps Railway from sleeping while a user is connected
+        fetch('/health').catch(() => {})
       }, 30000)
 
       return () => {
