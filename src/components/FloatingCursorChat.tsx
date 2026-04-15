@@ -10,7 +10,7 @@
  */
 
 import { useCollaboration } from './CollaborationHarness'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 
 export type FloatingChatPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -151,22 +151,17 @@ export function FloatingCursorChat({
     }
   }
 
-  // Handle AI help select mode - listen for field clicks
-  useEffect(() => {
-    if (!aiHelpSelectMode) {
-      console.log('[FloatingChat] Select mode disabled, removing listener')
-      return
-    }
+  // Handle AI help select mode - listen for field taps/clicks
+  // useLayoutEffect ensures the listener is attached synchronously before the browser paints,
+  // preventing missed clicks when the user taps a field immediately after entering select mode.
+  useLayoutEffect(() => {
+    if (!aiHelpSelectMode) return
 
-    console.log('[FloatingChat] Select mode enabled, adding click listener')
-
-    function handleFieldClick(e: MouseEvent) {
+    function handleFieldPointerDown(e: PointerEvent) {
       const target = e.target as HTMLElement
-      console.log('[FloatingChat] Click detected on:', target.tagName, target)
 
-      // Ignore clicks on the floating chat controls themselves
+      // Ignore taps on the floating chat controls themselves
       if (target.closest('[data-floating-chat]')) {
-        console.log('[FloatingChat] Click on floating chat controls, ignoring')
         return
       }
 
@@ -175,23 +170,21 @@ export function FloatingCursorChat({
       if (immediateField && (immediateField.type === 'checkbox' || immediateField.type === 'radio')) {
         e.preventDefault()
         e.stopPropagation()
-        console.log('[FloatingChat] Prevented default for checkbox/radio')
       }
 
-      // Check if clicked element is a form field
+      // Check if tapped element is a form field
       let field = target.closest('input, textarea, select') as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
 
-      // Special handling for select - if clicked on option, get parent select
+      // Special handling for select - if tapped on option, get parent select
       if (!field && target.tagName === 'OPTION') {
         const option = target as HTMLOptionElement
         field = option.closest('select') as HTMLSelectElement | null
       }
 
-      // If clicked inside a label (e.g., span inside label), find the label first
+      // If tapped inside a label (e.g., span inside label), find the label first
       if (!field) {
         const label = target.closest('label') as HTMLLabelElement | null
         if (label) {
-          console.log('[FloatingChat] Click inside label:', label)
           if (label.htmlFor) {
             field = document.getElementById(label.htmlFor) as HTMLInputElement | null
           } else {
@@ -201,38 +194,30 @@ export function FloatingCursorChat({
         }
       }
 
-      console.log('[FloatingChat] Field found:', field)
-
       if (field) {
-        // Prevent default action for this field
+        // Prevent default to stop focus/keyboard on mobile and checkbox toggle
         e.preventDefault()
         e.stopPropagation()
 
         const fieldName = field.name || field.id
         const elementIndex = field.getAttribute('data-collab-field-index')
-        console.log('[FloatingChat] Field selected:', fieldName, 'index:', elementIndex)
 
         // Dispatch event to request AI suggestion for this field
-        const event = new CustomEvent('ai-help-field-selected', {
+        window.dispatchEvent(new CustomEvent('ai-help-field-selected', {
           detail: { fieldName, elementIndex: elementIndex !== null ? parseInt(elementIndex) : undefined }
-        })
-        console.log('[FloatingChat] Dispatching event:', event.type, event.detail)
-        window.dispatchEvent(event)
-        console.log('[FloatingChat] Event dispatched successfully')
+        }))
 
         setAIHelpSelectMode(false)
         setShowHint(false)
-      } else {
-        console.log('[FloatingChat] No field found, click ignored')
       }
     }
 
-    // Add click listener in capture phase to intercept before other handlers
-    document.addEventListener('click', handleFieldClick, true)
+    // pointerdown fires immediately on both touch and mouse, before any 300ms delay.
+    // Capture phase ensures we intercept before the field's own handlers.
+    document.addEventListener('pointerdown', handleFieldPointerDown, true)
 
     return () => {
-      console.log('[FloatingChat] Removing click listener')
-      document.removeEventListener('click', handleFieldClick, true)
+      document.removeEventListener('pointerdown', handleFieldPointerDown, true)
     }
   }, [aiHelpSelectMode])
 
