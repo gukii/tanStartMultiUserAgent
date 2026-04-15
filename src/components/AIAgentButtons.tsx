@@ -24,8 +24,6 @@ interface AIAgentButtonsProps {
 export function AIAgentButtons({
   roomId,
   pageSchema,
-  fieldValues,
-  disabled,
   containerRef,
 }: AIAgentButtonsProps) {
   const [status, setStatus] = useState<string>('')
@@ -47,11 +45,6 @@ export function AIAgentButtons({
   function scopedQuery(selector: string): HTMLElement | null {
     const root = containerRef?.current ?? document
     return root.querySelector(selector) as HTMLElement | null
-  }
-
-  function scopedQueryAll(selector: string): NodeListOf<HTMLElement> {
-    const root = containerRef?.current ?? document
-    return root.querySelectorAll(selector) as NodeListOf<HTMLElement>
   }
 
   // Use refs to avoid re-attaching listeners when pageSchema/roomId change
@@ -208,11 +201,6 @@ export function AIAgentButtons({
     }
   }
 
-  // Wrapper for fillSingleField that uses current pageSchema/roomId
-  async function fillSingleField(fieldName: string) {
-    return fillSingleFieldWithParams(fieldName, pageSchema, roomId)
-  }
-
   async function fillFieldsWithParams(mode: 'fill-empty' | 'complete', schema: FieldSchema[], room: string) {
     setLoading(true)
     setStatus(`${mode === 'fill-empty' ? 'Filling empty fields' : 'Validating and fixing errors'}...`)
@@ -228,7 +216,7 @@ export function AIAgentButtons({
       // Note: field.id in schema is actually the field's "name" attribute (canonical identifier)
       const liveFieldValues: Record<string, string> = {}
 
-      schema.forEach((field, index) => {
+      schema.forEach((field) => {
         const element = (
           scopedQuery(`[data-collab-field-index="${field.elementIndex}"]`) ??
           scopedQuery(`[name="${field.id}"]`)

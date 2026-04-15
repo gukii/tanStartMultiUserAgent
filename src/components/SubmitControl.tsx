@@ -44,7 +44,6 @@ export function SubmitControl({
     readyStates,
     markReady,
     unmarkReady,
-    sendFormSubmit,
   } = useCollaboration()
 
   const isReady = readyStates[userId] ?? false

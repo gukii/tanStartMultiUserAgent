@@ -73,15 +73,15 @@ function getEnvironmentData(): EnvironmentData {
  */
 export function useTelemetryBuffer(options: TelemetryClientOptions): TelemetryClient {
   const {
-    sessionId,
-    userId,
+    sessionId: _sessionId,
+    userId: _userId,
     userName,
     socketRef,
     enabled = true,
     sampleRate = 1.0,
     piiMode = 'anonymize',
-    captureKeystrokes = true,
-    captureCursors = false,
+    captureKeystrokes: _captureKeystrokes = true,
+    captureCursors: _captureCursors = false,
   } = options;
 
   const bufferRef = useRef<TelemetryBuffer | null>(null);

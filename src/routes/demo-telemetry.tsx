@@ -18,11 +18,6 @@ import { getNormalBehavior } from "../lib/normalBehavior.server";
 import { submitCheckout } from "../lib/submitCheckout.server";
 import { faker } from "@faker-js/faker";
 
-interface ValidationError {
-  field: string;
-  message: string;
-}
-
 export const Route = createFileRoute("/demo-telemetry")({
   component: DemoTelemetryPage,
 });
@@ -47,8 +42,7 @@ function CheckoutForm({
   orderId: string | null;
 }) {
   const [mounted, setMounted] = useState(false);
-  const [formKey, setFormKey] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
+  const formKey = 0;
   const [toastVisible, setToastVisible] = useState(false);
   const {
     unmarkReady,
@@ -177,7 +171,6 @@ function CheckoutForm({
         e.preventDefault();
 
         const formData = new FormData(e.currentTarget);
-        setSubmitting(true);
 
         try {
           // Convert FormData to typed object for server function
@@ -235,7 +228,6 @@ function CheckoutForm({
             },
           ]);
         } finally {
-          setSubmitting(false);
         }
       }}
     >
@@ -602,7 +594,6 @@ function AISimulatorPanel({ partyKitHost, roomId }: SimulatorPanelProps) {
     // Generate valid future expiry date
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear() % 100; // Last 2 digits
-    const currentMonth = currentDate.getMonth() + 1;
 
     // Generate a date 1-3 years in the future
     const yearsAhead = faker.number.int({ min: 1, max: 3 });
@@ -886,8 +877,6 @@ function DemoTelemetryPage() {
       }}
     >
       <DemoPageContent
-        submitMode={submitMode}
-        setSubmitMode={setSubmitMode}
         partyKitHost={partyKitHost}
         roomId={roomId}
         submitted={submitted}
@@ -902,8 +891,6 @@ function DemoTelemetryPage() {
 }
 
 function DemoPageContent({
-  submitMode,
-  setSubmitMode,
   partyKitHost,
   roomId,
   submitted,
@@ -913,8 +900,6 @@ function DemoPageContent({
   orderId,
   onReset,
 }: {
-  submitMode: "any" | "consensus";
-  setSubmitMode: (mode: "any" | "consensus") => void;
   partyKitHost: string | undefined;
   roomId: string;
   submitted: boolean;

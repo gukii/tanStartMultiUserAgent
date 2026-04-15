@@ -11,7 +11,7 @@
  */
 
 import { Outlet, createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { CollaborationHarness } from '../components/CollaborationHarness'
 import { FloatingCursorChat, type FloatingChatPosition } from '../components/FloatingCursorChat'
 import { UserSettingsPanel } from '../components/UserSettingsPanel'

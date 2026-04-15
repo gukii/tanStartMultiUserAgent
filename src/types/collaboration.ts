@@ -33,6 +33,7 @@ export interface UserInfo {
   userId: string
   name: string
   color: string
+  isAgent?: boolean
 }
 
 export interface CursorState extends UserInfo, CursorPosition {
@@ -150,6 +151,8 @@ export type ClientMessage =
   | { type: 'CLEAR_FORM' } // Clear all field values, drafts, and ready states
   | { type: 'VALIDATION_STATUS'; fieldId: string; hasError: boolean; errorMessage?: string } // Notify server of validation state
   | { type: 'TELEMETRY_BATCH'; events: any[]; sequenceId: number } // Telemetry data batch
+  | { type: 'SERVER_VALIDATION_ERRORS'; errors: Array<{ field: string; message: string }> } // Broadcast server errors to peers
+  | { type: 'PING' } // Keepalive
 
 /** Messages the server sends to clients */
 export type ServerMessage =
@@ -171,6 +174,7 @@ export type ServerMessage =
   | { type: 'FORM_SUBMITTED'; userId: string; orderId?: string } // Broadcast form submission to all peers
   | { type: 'FORM_CLEARED' } // Broadcast form clear to all peers
   | { type: 'TELEMETRY_ACK'; sequenceId: number; status: 'success' | 'error'; error?: string } // Telemetry acknowledgment
+  | { type: 'SERVER_VALIDATION_ERRORS'; errors: Array<{ field: string; message: string }> } // Server validation errors broadcast to all peers
 
 /** Union of all messages (client or server direction) */
 export type WSMessage = ClientMessage | ServerMessage

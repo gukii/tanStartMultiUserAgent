@@ -44,8 +44,8 @@ export const Route = createFileRoute('/api/form-context-status')({
     handlers: {
       GET: async () => {
         try {
-          const { readFileSync } = await import('fs')
-          const { join } = await import('path')
+          const { readFileSync } = await import('node:fs')
+          const { join } = await import('node:path')
 
           const contextPath = join(process.cwd(), 'server', 'form-context.json')
           const content = readFileSync(contextPath, 'utf-8')

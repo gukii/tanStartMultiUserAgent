@@ -53,10 +53,6 @@ interface FieldSuggestion {
   reasoning?: string
 }
 
-interface SuggestionResponse {
-  suggestions: FieldSuggestion[]
-}
-
 interface FieldMapping {
   intent: string
   description: string
@@ -78,8 +74,8 @@ interface FormContext {
 async function loadFormContext(): Promise<FormContext | null> {
   try {
     // Dynamic import to avoid bundling fs/path for browser
-    const { readFileSync } = await import('fs')
-    const { join } = await import('path')
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
 
     const contextPath = join(process.cwd(), 'server', 'form-context.json')
     const content = readFileSync(contextPath, 'utf-8')
@@ -407,7 +403,7 @@ function generateValue(intent: string, field: FieldSchema, mode: 'fill-empty' | 
     case 'jobTitle':
       return faker.person.jobTitle()
     case 'username':
-      return faker.internet.userName()
+      return faker.internet.username()
     case 'password':
       return faker.internet.password()
     case 'url':

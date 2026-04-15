@@ -52,6 +52,7 @@ import type {
   FieldValue,
   RoomState,
   ServerMessage,
+  UserInfo,
 } from '../types/collaboration'
 
 // ---------------------------------------------------------------------------
@@ -139,7 +140,6 @@ function ValidationErrorNotification({
   onDismiss: () => void
 }) {
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
-  const [isFixed, setIsFixed] = useState(false)
 
   useEffect(() => {
     // Handle fixed positioning (no anchor needed)
@@ -155,7 +155,6 @@ function ValidationErrorNotification({
       container.style.width = '90%'
       document.body.appendChild(container)
       setPortalContainer(container)
-      setIsFixed(true)
 
       return () => {
         if (container && container.parentElement) {
@@ -208,8 +207,6 @@ function ValidationErrorNotification({
     }
 
     setPortalContainer(container)
-    setIsFixed(false)
-
     return () => {
       if (container && container.parentElement) {
         container.parentElement.removeChild(container)
@@ -425,7 +422,7 @@ export function CollaborationHarness({
   const [remoteCursors, setRemoteCursors] = useState<Record<string, CursorState>>({})
   const [remoteFieldValues, setRemoteFieldValues] = useState<Record<string, FieldValue>>({})
   const [drafts, setDrafts] = useState<Record<string, DraftSuggestion>>({})
-  const [users, setUsers] = useState<Record<string, { userId: string; name: string; color: string }>>({})
+  const [users, setUsers] = useState<Record<string, UserInfo>>({})
   const [currentSubmitMode, setCurrentSubmitMode] = useState<'any' | 'consensus'>(submitMode)
   const [readyStates, setReadyStates] = useState<Record<string, boolean>>({})
   const [cursorMessage, setCursorMessageState] = useState<string>('')
@@ -1209,7 +1206,7 @@ export function CollaborationHarness({
 
       // Get field label
       let fieldLabel = fieldId
-      const label = container.querySelector(`label[for="${fieldId}"]`)
+      const label = container!.querySelector(`label[for="${fieldId}"]`)
       if (label) {
         fieldLabel = label.textContent?.replace('*', '').trim() || fieldId
       }
@@ -1355,7 +1352,6 @@ export function CollaborationHarness({
     }> | null = null
     let currentRoute = typeof window !== 'undefined' ? window.location.pathname : ''
     let mutationCount = 0
-    let lastMutationTime = 0
     let previouslyErroredFields = new Set<string>() // Track which fields had errors in last submission
 
     // Capture DOM state for a field
@@ -1395,7 +1391,7 @@ export function CollaborationHarness({
     // Track submission cycle start
     function onSubmitStart(e: Event) {
       const form = e.target as HTMLFormElement
-      if (!form || !container.contains(form)) return
+      if (!form || !container!.contains(form)) return
 
       // Capture snapshot of who last edited each field
       submissionCycleActive = true
@@ -1403,7 +1399,6 @@ export function CollaborationHarness({
       preSubmitSnapshot = new Map()
       currentRoute = window.location.pathname
       mutationCount = 0
-      lastMutationTime = Date.now()
 
       const fields = form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
         'input, textarea, select'
@@ -1426,7 +1421,7 @@ export function CollaborationHarness({
         }
 
         // Capture DOM state for this field (only within form boundaries)
-        preSubmitSnapshot.set(fieldId, captureFieldState(field, form))
+        preSubmitSnapshot!.set(fieldId, captureFieldState(field, form))
       })
 
       // Clear any existing timeout
@@ -1538,7 +1533,6 @@ export function CollaborationHarness({
 
       // Track that mutations are happening (response being processed)
       mutationCount += mutations.length
-      lastMutationTime = Date.now()
 
       // Check for route change (likely successful submission)
       if (window.location.pathname !== currentRoute) {
@@ -1713,10 +1707,10 @@ export function CollaborationHarness({
         previouslyErroredFields.add(fieldId)
 
         // Get field label
-        const field = container.querySelector(`[name="${CSS.escape(fieldId)}"], [id="${CSS.escape(fieldId)}"]`)
+        const field = container!.querySelector(`[name="${CSS.escape(fieldId)}"], [id="${CSS.escape(fieldId)}"]`)
         let fieldLabel = fieldId
         if (field) {
-          const label = container.querySelector(`label[for="${field.id}"]`)
+          const label = container!.querySelector(`label[for="${field.id}"]`)
           if (label) {
             fieldLabel = label.textContent?.replace('*', '').trim() || fieldId
           }
@@ -1740,7 +1734,7 @@ export function CollaborationHarness({
       // Show summary notification below submit button
       if (errors.length > 0) {
         setValidationErrors(errors)
-        const form = container.querySelector('form')
+        const form = container!.querySelector('form')
         const anchor = findValidationAnchor(form, validationAnchor)
         if (anchor) {
           setSubmitButtonElement(anchor)
@@ -1763,7 +1757,7 @@ export function CollaborationHarness({
 
       const errorFieldIds = new Set<string>()
 
-      const form = container.querySelector('form')
+      const form = container!.querySelector('form')
       if (!form) return
 
       const fields = form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
@@ -1821,14 +1815,6 @@ export function CollaborationHarness({
         submissionSnapshot = {}
         preSubmitSnapshot = null
       }
-    }
-
-    // Helper to check if color is redish
-    function isRedish(colorStr: string): boolean {
-      const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-      if (!match) return false
-      const [, r, g, b] = match.map(Number)
-      return r > 150 && r > g * 1.5 && r > b * 1.5 // Red is dominant
     }
 
     // Start observing - only watch the form element, not the entire container
@@ -1911,7 +1897,7 @@ export function CollaborationHarness({
       const fieldEl = target.closest<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
         'input, textarea, select',
       )
-      if (!fieldEl || !container.contains(fieldEl)) {
+      if (!fieldEl || !container!.contains(fieldEl)) {
         // Clicked outside a field - reset tracking
         lastClickTime = 0
         lastClickedFieldId = null

@@ -1,4 +1,4 @@
-import type { TelemetryEvent, TelemetryConfig } from '../types/telemetry';
+import type { TelemetryEvent } from '../types/telemetry';
 
 /**
  * Telemetry Event Buffer
@@ -26,7 +26,6 @@ export class TelemetryBuffer {
   private buffer: TelemetryEvent[] = [];
   private sequenceId = 0;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastFlushTime = Date.now();
   private throttleTimers: Map<string, number> = new Map();
 
   private enabled: boolean;
@@ -122,7 +121,6 @@ export class TelemetryBuffer {
       console.error('[Telemetry] Flush error:', error);
     }
 
-    this.lastFlushTime = Date.now();
     this.scheduleFlush();
   }
 

@@ -75,7 +75,7 @@ export function FloatingCursorChat({
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') {
       commitMessage()
-      e.currentTarget.blur()
+      ;(e.currentTarget as HTMLElement).blur()
 
       // Return focus to previous element for fluid chat feeling
       if (previousFocusRef.current) {
@@ -85,7 +85,7 @@ export function FloatingCursorChat({
     } else if (e.key === 'Escape') {
       // Cancel without committing
       setLocalMessage(cursorMessage)
-      e.currentTarget.blur()
+      ;(e.currentTarget as HTMLElement).blur()
 
       // Return focus to previous element
       if (previousFocusRef.current) {
@@ -113,7 +113,7 @@ export function FloatingCursorChat({
   }, [])
 
   // AI Help button handlers
-  function handleAIHelpStart(e: React.MouseEvent | React.TouchEvent) {
+  function handleAIHelpStart(_e: React.MouseEvent | React.TouchEvent) {
     // Start long-press timer (800ms = long press triggers "fill all")
     longPressTimerRef.current = setTimeout(() => {
       // Long press: trigger "fill all empty fields"

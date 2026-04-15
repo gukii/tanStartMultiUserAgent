@@ -22,11 +22,13 @@ interface UserSettingsPanelProps {
   userName: string
   userColor: string
   floatingChatPosition: FloatingChatPosition
-  submitMode: 'any' | 'consensus'
+  submitMode?: 'any' | 'consensus'
   aiHelpModes?: AIHelpMode[]
+  cursorMessage?: string
   updateUser: (name: string, color: string) => void
   setFloatingChatPosition: (position: FloatingChatPosition) => void
-  setSubmitMode: (mode: 'any' | 'consensus') => void
+  setSubmitMode?: (mode: 'any' | 'consensus') => void
+  setCursorMessage?: (message: string) => void
   setAIHelpModes?: (modes: AIHelpMode[]) => void
 }
 
@@ -46,7 +48,7 @@ export function UserSettingsPanel({
   const [name, setName] = useState(userName)
   const [color, setColor] = useState(userColor)
   const [position, setPosition] = useState<FloatingChatPosition>(floatingChatPosition)
-  const [mode, setMode] = useState<'any' | 'consensus'>(submitMode)
+  const [mode, setMode] = useState<'any' | 'consensus'>(submitMode ?? 'any')
   const [helpModes, setHelpModes] = useState<AIHelpMode[]>(aiHelpModes)
 
   // Update local state when props change
@@ -54,7 +56,7 @@ export function UserSettingsPanel({
     setName(userName)
     setColor(userColor)
     setPosition(floatingChatPosition)
-    setMode(submitMode)
+    if (submitMode !== undefined) setMode(submitMode)
     setHelpModes(aiHelpModes)
   }, [userName, userColor, floatingChatPosition, submitMode, aiHelpModes])
 
@@ -65,7 +67,7 @@ export function UserSettingsPanel({
       updateUser(name.trim(), color)
     }
     setFloatingChatPosition(position)
-    setSubmitMode(mode)
+    setSubmitMode?.(mode)
     if (setAIHelpModes) {
       setAIHelpModes(helpModes)
     }

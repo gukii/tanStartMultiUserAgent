@@ -47,7 +47,7 @@ export function TelemetryEventCapture({ children }: TelemetryEventCaptureProps) 
       const inputEvent = e as InputEvent;
 
       // Track keystroke if enabled
-      if (config.captureKeystrokes && inputEvent.data) {
+      if (config!.captureKeystrokes && inputEvent.data) {
         capture('field_input', {
           fieldId,
           key: inputEvent.data,
@@ -165,7 +165,7 @@ export function TelemetryEventCapture({ children }: TelemetryEventCaptureProps) 
     // ========================================================================
     let cursorMoveTimeout: ReturnType<typeof setTimeout> | null = null;
     function onMouseMove(e: MouseEvent) {
-      if (!config.captureCursors) return;
+      if (!config!.captureCursors) return;
 
       // Throttle to 200ms
       if (cursorMoveTimeout) return;

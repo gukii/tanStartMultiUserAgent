@@ -54,7 +54,7 @@ function getDb() {
  * preventing initialization errors during build or client-side rendering.
  */
 export const telemetryDb = new Proxy({} as ReturnType<typeof drizzle>, {
-  get(target, prop) {
+  get(_target, prop) {
     return getDb()[prop as keyof ReturnType<typeof drizzle>];
   }
 });
