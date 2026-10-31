@@ -1,5 +1,5 @@
 /**
- * submitCheckout.server.ts
+ * submitCheckout.functions.ts
  *
  * TanStack Start Server Function – Checkout form submission with validation.
  *

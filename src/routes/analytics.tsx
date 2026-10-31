@@ -13,7 +13,7 @@
 
 import { createFileRoute } from '@tanstack/react-router'
 import { Fragment, useState, useEffect } from 'react'
-import { getAnalytics, getCollaborativeEditDetails, getSubmissionCycles, getActionSequences } from '../lib/analytics.server'
+import { getAnalytics, getCollaborativeEditDetails, getSubmissionCycles, getActionSequences } from '../lib/analytics.functions'
 
 export const Route = createFileRoute('/analytics')({
   component: AnalyticsPage,

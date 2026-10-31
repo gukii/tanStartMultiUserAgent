@@ -14,8 +14,8 @@ import { useState, useId, useEffect, useRef, useCallback } from "react";
 import { CollaborationHarnessWithTelemetry } from "../components/CollaborationHarnessWithTelemetry";
 import { useCollaboration } from "../components/CollaborationHarness";
 import { SubmitControl } from "../components/SubmitControl";
-import { getNormalBehavior } from "../lib/normalBehavior.server";
-import { submitCheckout } from "../lib/submitCheckout.server";
+import { getNormalBehavior } from "../lib/normalBehavior.functions";
+import { submitCheckout } from "../lib/submitCheckout.functions";
 import { faker } from "@faker-js/faker";
 
 export const Route = createFileRoute("/demo-telemetry")({

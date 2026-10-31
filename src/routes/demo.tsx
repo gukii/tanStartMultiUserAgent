@@ -16,7 +16,7 @@ import { CollaborationHarness, useCollaboration } from '../components/Collaborat
 import { SubmitControl } from '../components/SubmitControl'
 import { UserSettingsPanel } from '../components/UserSettingsPanel'
 import { FloatingCursorChat, type FloatingChatPosition } from '../components/FloatingCursorChat'
-import { getNormalBehavior } from '../lib/normalBehavior.server'
+import { getNormalBehavior } from '../lib/normalBehavior.functions'
 
 export const Route = createFileRoute('/demo')({
   component: DemoPage,

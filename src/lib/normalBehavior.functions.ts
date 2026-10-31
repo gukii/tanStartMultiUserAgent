@@ -1,5 +1,5 @@
 /**
- * normalBehavior.server.ts
+ * normalBehavior.functions.ts
  *
  * TanStack Start Server Function – Historical Guardrails for AI Agents.
  *

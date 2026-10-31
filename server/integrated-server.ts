@@ -16,6 +16,7 @@ import { createServer } from 'http'
 import { createProxyMiddleware } from 'http-proxy-middleware'
 import { telemetryHandler } from './telemetry-handler'
 import { initDatabase } from '../scripts/init-db'
+import { createPrivateAccess } from './private-access.mjs'
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -805,7 +806,17 @@ async function startTanStackServer(): Promise<void> {
 
         // Read request body
         const chunks: Buffer[] = []
-        for await (const chunk of req) chunks.push(chunk as Buffer)
+        let bodyBytes = 0
+        for await (const chunk of req) {
+          bodyBytes += Buffer.byteLength(chunk)
+          if (bodyBytes > 2 * 1024 * 1024) {
+            res.writeHead(413)
+            res.end('Request too large')
+            req.destroy()
+            return
+          }
+          chunks.push(chunk as Buffer)
+        }
         const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined
 
         // Convert to Web Fetch Request
@@ -887,6 +898,11 @@ async function startTanStackServer(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const app = express()
+const privateAccess = IS_PRODUCTION ? createPrivateAccess(process.env) : null
+app.use((request, response, next) => {
+  if (privateAccess && !privateAccess.http(request, response)) return
+  next()
+})
 const roomManager = new RoomManager()
 
 // Health check (before proxy)
@@ -895,7 +911,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     websocket: 'active',
     rooms: roomManager['rooms'].size,
-    tanstackPort: TANSTACK_PORT,
+
   })
 })
 
@@ -908,6 +924,8 @@ const server = createServer(app)
 // WebSocket server for /parties/main/:roomId
 const wss = new WebSocketServer({
   noServer: true, // Handle upgrades manually
+  maxPayload: 1024 * 1024,
+  perMessageDeflate: false,
 })
 
 // Store proxy reference for WebSocket forwarding
@@ -992,6 +1010,7 @@ async function start() {
 
     // Handle WebSocket upgrade requests AFTER proxy is configured
     server.on('upgrade', (request, socket, head) => {
+      if (privateAccess && !privateAccess.upgrade(request, socket)) return
       const pathname = request.url?.split('?')[0]
 
       // Only handle WebSocket upgrades for /parties/main/:roomId paths

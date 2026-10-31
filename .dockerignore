@@ -1,0 +1,13 @@
+node_modules
+.git
+.env
+.env.*
+.openai
+.output
+.nitro
+dist
+.security-test-data
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
